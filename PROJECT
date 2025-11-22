@@ -8,4 +8,14 @@ layout:
 - go.kubebuilder.io/v4
 projectName: sleepod-controller
 repo: github.com/shaygef123/SleePod-controller
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: sleepod.io
+  group: sleepod
+  kind: SleepOrder
+  path: github.com/shaygef123/SleePod-controller/api/v1alpha1
+  version: v1alpha1
 version: "3"
