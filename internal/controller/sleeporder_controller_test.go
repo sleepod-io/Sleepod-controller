@@ -69,6 +69,7 @@ func TestSnapshotReplicas(t *testing.T) {
 		if err != nil {
 			t.Fatalf("snapshotReplicas failed: %v", err)
 		}
+		// Check that the annotation was added
 		switch tt.object.(type) {
 		case *appsv1.Deployment:
 			updatedDeployment := tt.object.(*appsv1.Deployment)
@@ -100,4 +101,110 @@ func TestSnapshotReplicas(t *testing.T) {
 			t.Fatalf("unknown resource type: %T", tt.object)
 		}
 	}
+}
+
+func TestRestoreReplicas(t *testing.T) {
+	// 1. Setup Scheme (to know about Deployment types)
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+
+	// 2. Create a "Fake" Deployment
+	replicas := int32(0)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+			Annotations: map[string]string{
+				annotationKey: "5",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	// 2. Create a "Fake" StatefulSet
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "default",
+			Annotations: map[string]string{
+				annotationKey: "5",
+			},
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	// 3. Create a Fake Client with this object pre-loaded
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(deployment, statefulset).
+		Build()
+
+	// 4. Create the Reconciler with the fake client
+	r := &SleepOrderReconciler{
+		Client: cl,
+		Scheme: scheme,
+	}
+
+	// 5. Call the function (we haven't written it yet!)
+	ctx := context.Background()
+	// We need to fetch the object first to pass it, or the function fetches it?
+	// Let's assume the function takes the object as an argument for now,
+	// or we pass the key. Let's pass the object to keep it simple.
+	tests := []struct{
+		name string
+		object client.Object
+	}{
+		{"Deployment", deployment},
+		{"StatefulSet", statefulset},
+	}
+
+	for _, tt := range tests {
+		err := r.restoreReplicas(ctx, tt.object)
+		if err != nil {
+			t.Fatalf("restoreReplicas failed: %v", err)
+		}
+		// Verify that the replicas were restored
+		switch tt.object.(type) {
+		case *appsv1.Deployment:
+			updatedDeployment := tt.object.(*appsv1.Deployment)
+			err = cl.Get(ctx, client.ObjectKeyFromObject(deployment), updatedDeployment)
+			if err != nil {
+				t.Fatalf("failed to get updated deployment: %v", err)
+			}
+			if *updatedDeployment.Spec.Replicas != 5 {
+				t.Errorf("expected replicas '5', got '%d'", *updatedDeployment.Spec.Replicas)
+			}
+			// Verify that the annotation was removed
+			if _, ok := updatedDeployment.Annotations[annotationKey]; ok {
+				t.Errorf("annotation '%s' should have been removed", annotationKey)
+			}
+		case *appsv1.StatefulSet:
+			updatedStatefulSet := tt.object.(*appsv1.StatefulSet)
+			err = cl.Get(ctx, client.ObjectKeyFromObject(statefulset), updatedStatefulSet)
+			if err != nil {
+				t.Fatalf("failed to get updated statefulset: %v", err)
+			}
+			if *updatedStatefulSet.Spec.Replicas != 5 {
+				t.Errorf("expected replicas '5', got '%d'", *updatedStatefulSet.Spec.Replicas)
+			}
+			// Verify that the annotation was removed
+			if _, ok := updatedStatefulSet.Annotations[annotationKey]; ok {
+				t.Errorf("annotation '%s' should have been removed", annotationKey)
+			}
+		default:
+			t.Fatalf("unknown resource type: %T", tt.object)
+		}
+	}
+}
+
+func TestReconcile_sleepFlow(t *testing.T) {
+	// TODO: Test Reconcile sleep flow
+}
+
+func TestReconcile_wakeFlow(t *testing.T) {
+	// TODO: Test Reconcile wake flow
 }

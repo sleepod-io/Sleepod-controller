@@ -35,14 +35,16 @@ type SleepOrderReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+const (
+	annotationKey string = "sleepod.io/original-replicas"
+)
 
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders/finalizers,verbs=update
+
 // snapshotReplicas saves the current replica count to an annotation on the target object.
 func (r *SleepOrderReconciler) snapshotReplicas(ctx context.Context, target client.Object) error {
-	annotationKey := "sleepod.io/original-replicas"
-
 	// Get replicas from target
 	replicas, err := getReplicas(target)
 	if err != nil {
@@ -59,6 +61,38 @@ func (r *SleepOrderReconciler) snapshotReplicas(ctx context.Context, target clie
 	}
 	annotations[annotationKey] = strconv.Itoa(int(replicas))
 	target.SetAnnotations(annotations)
+	return r.Client.Update(ctx, target)
+}
+
+// restoreReplicas restores the replica count from an annotation on the target object.
+func (r *SleepOrderReconciler) restoreReplicas(ctx context.Context, target client.Object) error {
+	// Get replicas from annotation
+	err := r.Client.Get(ctx, client.ObjectKeyFromObject(target), target)
+	if err != nil {
+		return err
+	}
+	annotations := target.GetAnnotations()
+	if annotations == nil {
+		return fmt.Errorf("annotation %s not found", annotationKey)
+	}
+	replicas, err := strconv.Atoi(annotations[annotationKey])
+	if err != nil {
+		return err
+	}
+	replicasInt32 := int32(replicas)
+	// Update replicas
+	switch t := target.(type) {
+	case *appsv1.Deployment:
+		t.Spec.Replicas = &replicasInt32
+	case *appsv1.StatefulSet:
+		t.Spec.Replicas = &replicasInt32
+	default:
+		return fmt.Errorf("unsupported resource type: %T", target)
+	}
+	// Remove annotation
+	delete(annotations, annotationKey)
+	target.SetAnnotations(annotations)
+
 	return r.Client.Update(ctx, target)
 }
 
