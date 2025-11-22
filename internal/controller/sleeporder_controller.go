@@ -18,12 +18,12 @@ package controller
 
 import (
 	"context"
-	"strconv"
 	"fmt"
+	"strconv"
 
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -35,6 +35,7 @@ type SleepOrderReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+
 const (
 	annotationKey string = "sleepod.io/original-replicas"
 )
@@ -51,7 +52,7 @@ func (r *SleepOrderReconciler) snapshotReplicas(ctx context.Context, target clie
 		return err
 	}
 
-	err = r.Client.Get(ctx, client.ObjectKeyFromObject(target), target)
+	err = r.Get(ctx, client.ObjectKeyFromObject(target), target)
 	if err != nil {
 		return err
 	}
@@ -61,13 +62,13 @@ func (r *SleepOrderReconciler) snapshotReplicas(ctx context.Context, target clie
 	}
 	annotations[annotationKey] = strconv.Itoa(int(replicas))
 	target.SetAnnotations(annotations)
-	return r.Client.Update(ctx, target)
+	return r.Update(ctx, target)
 }
 
 // restoreReplicas restores the replica count from an annotation on the target object.
 func (r *SleepOrderReconciler) restoreReplicas(ctx context.Context, target client.Object) error {
 	// Get replicas from annotation
-	err := r.Client.Get(ctx, client.ObjectKeyFromObject(target), target)
+	err := r.Get(ctx, client.ObjectKeyFromObject(target), target)
 	if err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func (r *SleepOrderReconciler) restoreReplicas(ctx context.Context, target clien
 	delete(annotations, annotationKey)
 	target.SetAnnotations(annotations)
 
-	return r.Client.Update(ctx, target)
+	return r.Update(ctx, target)
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

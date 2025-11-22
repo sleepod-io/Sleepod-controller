@@ -56,8 +56,8 @@ func TestSnapshotReplicas(t *testing.T) {
 	// We need to fetch the object first to pass it, or the function fetches it?
 	// Let's assume the function takes the object as an argument for now,
 	// or we pass the key. Let's pass the object to keep it simple.
-	tests := []struct{
-		name string
+	tests := []struct {
+		name   string
 		object client.Object
 	}{
 		{"Deployment", deployment},
@@ -154,8 +154,8 @@ func TestRestoreReplicas(t *testing.T) {
 	// We need to fetch the object first to pass it, or the function fetches it?
 	// Let's assume the function takes the object as an argument for now,
 	// or we pass the key. Let's pass the object to keep it simple.
-	tests := []struct{
-		name string
+	tests := []struct {
+		name   string
 		object client.Object
 	}{
 		{"Deployment", deployment},

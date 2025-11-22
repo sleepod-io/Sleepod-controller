@@ -25,31 +25,31 @@ import (
 
 // SleepOrderSpec defines the desired state of SleepOrder
 type SleepOrderSpec struct {
-    // +kubebuilder:validation:Required
-    TargetRef TargetRef `json:"targetRef"`
-    // +kubebuilder:validation:Pattern=`^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$`
-    WakeAt string `json:"wakeAt"`
-    // +kubebuilder:validation:Pattern=`^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$`
-    SleepAt string `json:"sleepAt"`
-    // +kubebuilder:default="UTC"
-    Timezone string `json:"timezone,omitempty"`
+	// +kubebuilder:validation:Required
+	TargetRef TargetRef `json:"targetRef"`
+	// +kubebuilder:validation:Pattern=`^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$`
+	WakeAt string `json:"wakeAt"`
+	// +kubebuilder:validation:Pattern=`^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$`
+	SleepAt string `json:"sleepAt"`
+	// +kubebuilder:default="UTC"
+	Timezone string `json:"timezone,omitempty"`
 }
 
 type TargetRef struct {
 	// +kubebuilder:default=apps
-    APIVersion string `json:"apiVersion"`
+	APIVersion string `json:"apiVersion"`
 	// +kubebuilder:validation:Enum=Deployment;StatefulSet
-    Kind string `json:"kind"`
-    Name string `json:"name"`
+	Kind string `json:"kind"`
+	Name string `json:"name"`
 }
 
 // SleepOrderStatus defines the observed state of SleepOrder.
 type SleepOrderStatus struct {
-    // +kubebuilder:validation:Enum=Sleeping;Awake;Error
-    CurrentState string `json:"currentState,omitempty"`
-    OriginalReplicas *int32 `json:"originalReplicas,omitempty"`
-    LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
-	NextOperationTime *metav1.Time `json:"nextOperationTime,omitempty"`
+	// +kubebuilder:validation:Enum=Sleeping;Awake;Error
+	CurrentState       string       `json:"currentState,omitempty"`
+	OriginalReplicas   *int32       `json:"originalReplicas,omitempty"`
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	NextOperationTime  *metav1.Time `json:"nextOperationTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
