@@ -1,0 +1,9 @@
+apiVersion: sleepod.sleepod.io/v1alpha1
+kind: SleepOrder
+metadata:
+  labels:
+    app.kubernetes.io/name: sleepod-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: sleeporder-sample
+spec:
+  # TODO(user): Add fields here
