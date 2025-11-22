@@ -1,84 +1,103 @@
-/*
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controller
 
 import (
 	"context"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = Describe("SleepOrder Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+func TestSnapshotReplicas(t *testing.T) {
+	// 1. Setup Scheme (to know about Deployment types)
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
 
-		ctx := context.Background()
+	// 2. Create a "Fake" Deployment
+	replicas := int32(5)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+		},
+	}
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+	// 2. Create a "Fake" StatefulSet
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	// 3. Create a Fake Client with this object pre-loaded
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(deployment, statefulset).
+		Build()
+
+	// 4. Create the Reconciler with the fake client
+	r := &SleepOrderReconciler{
+		Client: cl,
+		Scheme: scheme,
+	}
+
+	// 5. Call the function (we haven't written it yet!)
+	ctx := context.Background()
+	// We need to fetch the object first to pass it, or the function fetches it?
+	// Let's assume the function takes the object as an argument for now,
+	// or we pass the key. Let's pass the object to keep it simple.
+	tests := []struct{
+		name string
+		object client.Object
+	}{
+		{"Deployment", deployment},
+		{"StatefulSet", statefulset},
+	}
+
+	for _, tt := range tests {
+		err := r.snapshotReplicas(ctx, tt.object)
+		if err != nil {
+			t.Fatalf("snapshotReplicas failed: %v", err)
 		}
-		sleeporder := &sleepodv1alpha1.SleepOrder{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind SleepOrder")
-			err := k8sClient.Get(ctx, typeNamespacedName, sleeporder)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &sleepodv1alpha1.SleepOrder{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		switch tt.object.(type) {
+		case *appsv1.Deployment:
+			updatedDeployment := tt.object.(*appsv1.Deployment)
+			err = cl.Get(ctx, client.ObjectKeyFromObject(deployment), updatedDeployment)
+			if err != nil {
+				t.Fatalf("failed to get updated deployment: %v", err)
 			}
-		})
-
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &sleepodv1alpha1.SleepOrder{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance SleepOrder")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &SleepOrderReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+			val, ok := updatedDeployment.Annotations["sleepod.io/original-replicas"]
+			if !ok {
+				t.Error("annotation 'sleepod.io/original-replicas' not found")
 			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
-		})
-	})
-})
+			if val != "5" {
+				t.Errorf("expected annotation '5', got '%s'", val)
+			}
+		case *appsv1.StatefulSet:
+			updatedStatefulSet := tt.object.(*appsv1.StatefulSet)
+			err = cl.Get(ctx, client.ObjectKeyFromObject(statefulset), updatedStatefulSet)
+			if err != nil {
+				t.Fatalf("failed to get updated statefulset: %v", err)
+			}
+			val, ok := updatedStatefulSet.Annotations["sleepod.io/original-replicas"]
+			if !ok {
+				t.Error("annotation 'sleepod.io/original-replicas' not found")
+			}
+			if val != "5" {
+				t.Errorf("expected annotation '5', got '%s'", val)
+			}
+		default:
+			t.Fatalf("unknown resource type: %T", tt.object)
+		}
+	}
+}
