@@ -25,20 +25,31 @@ import (
 
 // SleepOrderSpec defines the desired state of SleepOrder
 type SleepOrderSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+    // +kubebuilder:validation:Required
+    TargetRef TargetRef `json:"targetRef"`
+    // +kubebuilder:validation:Pattern=`^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$`
+    WakeAt string `json:"wakeAt"`
+    // +kubebuilder:validation:Pattern=`^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$`
+    SleepAt string `json:"sleepAt"`
+    // +kubebuilder:default="UTC"
+    Timezone string `json:"timezone,omitempty"`
+}
 
-	// foo is an example field of SleepOrder. Edit sleeporder_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+type TargetRef struct {
+	// +kubebuilder:default=apps
+    APIVersion string `json:"apiVersion"`
+	// +kubebuilder:validation:Enum=Deployment;StatefulSet
+    Kind string `json:"kind"`
+    Name string `json:"name"`
 }
 
 // SleepOrderStatus defines the observed state of SleepOrder.
 type SleepOrderStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+    // +kubebuilder:validation:Enum=Sleeping;Awake;Error
+    CurrentState string `json:"currentState,omitempty"`
+    OriginalReplicas *int32 `json:"originalReplicas,omitempty"`
+    LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	NextOperationTime *metav1.Time `json:"nextOperationTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
