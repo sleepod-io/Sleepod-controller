@@ -2,21 +2,27 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"testing"
+	"time"
 
+	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
+	"github.com/shaygef123/SleePod-controller/internal/logic"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// TODO: make consts for all the test values.
 func TestSnapshotReplicas(t *testing.T) {
-	// 1. Setup Scheme (to know about Deployment types)
+	// Setup Scheme (to know about Deployment types)
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
 
-	// 2. Create a "Fake" Deployment
+	// Create a "Fake" Deployment
 	replicas := int32(5)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -28,7 +34,7 @@ func TestSnapshotReplicas(t *testing.T) {
 		},
 	}
 
-	// 2. Create a "Fake" StatefulSet
+	// Create a "Fake" StatefulSet
 	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-statefulset",
@@ -39,23 +45,19 @@ func TestSnapshotReplicas(t *testing.T) {
 		},
 	}
 
-	// 3. Create a Fake Client with this object pre-loaded
+	// Create a Fake Client with this object pre-loaded
 	cl := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(deployment, statefulset).
 		Build()
 
-	// 4. Create the Reconciler with the fake client
+	// Create the Reconciler with the fake client
 	r := &SleepOrderReconciler{
 		Client: cl,
 		Scheme: scheme,
 	}
 
-	// 5. Call the function (we haven't written it yet!)
 	ctx := context.Background()
-	// We need to fetch the object first to pass it, or the function fetches it?
-	// Let's assume the function takes the object as an argument for now,
-	// or we pass the key. Let's pass the object to keep it simple.
 	tests := []struct {
 		name   string
 		object client.Object
@@ -65,7 +67,7 @@ func TestSnapshotReplicas(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := r.snapshotReplicas(ctx, tt.object)
+		currentReplicas, err := r.snapshotReplicas(ctx, tt.object)
 		if err != nil {
 			t.Fatalf("snapshotReplicas failed: %v", err)
 		}
@@ -81,8 +83,8 @@ func TestSnapshotReplicas(t *testing.T) {
 			if !ok {
 				t.Error("annotation 'sleepod.io/original-replicas' not found")
 			}
-			if val != "5" {
-				t.Errorf("expected annotation '5', got '%s'", val)
+			if val != strconv.Itoa(int(currentReplicas)) {
+				t.Errorf("expected annotation '%d', got '%s'", currentReplicas, val)
 			}
 		case *appsv1.StatefulSet:
 			updatedStatefulSet := tt.object.(*appsv1.StatefulSet)
@@ -94,8 +96,8 @@ func TestSnapshotReplicas(t *testing.T) {
 			if !ok {
 				t.Error("annotation 'sleepod.io/original-replicas' not found")
 			}
-			if val != "5" {
-				t.Errorf("expected annotation '5', got '%s'", val)
+			if val != strconv.Itoa(int(currentReplicas)) {
+				t.Errorf("expected annotation '%d', got '%s'", currentReplicas, val)
 			}
 		default:
 			t.Fatalf("unknown resource type: %T", tt.object)
@@ -104,11 +106,11 @@ func TestSnapshotReplicas(t *testing.T) {
 }
 
 func TestRestoreReplicas(t *testing.T) {
-	// 1. Setup Scheme (to know about Deployment types)
+	// Setup Scheme (to know about Deployment types)
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
 
-	// 2. Create a "Fake" Deployment
+	// Create a "Fake" Deployment
 	replicas := int32(0)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -123,7 +125,7 @@ func TestRestoreReplicas(t *testing.T) {
 		},
 	}
 
-	// 2. Create a "Fake" StatefulSet
+	// Create a "Fake" StatefulSet
 	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-statefulset",
@@ -137,23 +139,19 @@ func TestRestoreReplicas(t *testing.T) {
 		},
 	}
 
-	// 3. Create a Fake Client with this object pre-loaded
+	// Create a Fake Client with this object pre-loaded
 	cl := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(deployment, statefulset).
 		Build()
 
-	// 4. Create the Reconciler with the fake client
+	// Create the Reconciler with the fake client
 	r := &SleepOrderReconciler{
 		Client: cl,
 		Scheme: scheme,
 	}
 
-	// 5. Call the function (we haven't written it yet!)
 	ctx := context.Background()
-	// We need to fetch the object first to pass it, or the function fetches it?
-	// Let's assume the function takes the object as an argument for now,
-	// or we pass the key. Let's pass the object to keep it simple.
 	tests := []struct {
 		name   string
 		object client.Object
@@ -163,7 +161,7 @@ func TestRestoreReplicas(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := r.restoreReplicas(ctx, tt.object)
+		originalReplicas, err := r.restoreReplicas(ctx, tt.object)
 		if err != nil {
 			t.Fatalf("restoreReplicas failed: %v", err)
 		}
@@ -175,8 +173,8 @@ func TestRestoreReplicas(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to get updated deployment: %v", err)
 			}
-			if *updatedDeployment.Spec.Replicas != 5 {
-				t.Errorf("expected replicas '5', got '%d'", *updatedDeployment.Spec.Replicas)
+			if *updatedDeployment.Spec.Replicas != originalReplicas {
+				t.Errorf("expected replicas '%d', got '%d'", originalReplicas, *updatedDeployment.Spec.Replicas)
 			}
 			// Verify that the annotation was removed
 			if _, ok := updatedDeployment.Annotations[annotationKey]; ok {
@@ -188,8 +186,8 @@ func TestRestoreReplicas(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to get updated statefulset: %v", err)
 			}
-			if *updatedStatefulSet.Spec.Replicas != 5 {
-				t.Errorf("expected replicas '5', got '%d'", *updatedStatefulSet.Spec.Replicas)
+			if *updatedStatefulSet.Spec.Replicas != originalReplicas {
+				t.Errorf("expected replicas '%d', got '%d'", originalReplicas, *updatedStatefulSet.Spec.Replicas)
 			}
 			// Verify that the annotation was removed
 			if _, ok := updatedStatefulSet.Annotations[annotationKey]; ok {
@@ -202,9 +200,172 @@ func TestRestoreReplicas(t *testing.T) {
 }
 
 func TestReconcile_sleepFlow(t *testing.T) {
-	// TODO: Test Reconcile sleep flow
+	// Setup Scheme (to know about Deployment types)
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	_ = sleepodv1alpha1.AddToScheme(scheme)
+
+	// Create a "Fake" Deployment
+	replicas := int32(3)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	// Create a "Fake" StatefulSet
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	// Create a SleepOrders
+	wakeAt := time.Now().UTC().Add(time.Hour).Format("15:04")
+	sleepAt := time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+	timezone := "UTC"
+	deploymentSleepOrder := &sleepodv1alpha1.SleepOrder{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment-sleeporder",
+			Namespace: "default",
+		},
+		Spec: sleepodv1alpha1.SleepOrderSpec{
+			TargetRef: sleepodv1alpha1.TargetRef{
+				Kind: "Deployment",
+				Name: "test-deployment",
+			},
+			WakeAt:   wakeAt,
+			SleepAt:  sleepAt,
+			Timezone: timezone,
+		},
+	}
+	statefulsetSleepOrder := &sleepodv1alpha1.SleepOrder{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset-sleeporder",
+			Namespace: "default",
+		},
+		Spec: sleepodv1alpha1.SleepOrderSpec{
+			TargetRef: sleepodv1alpha1.TargetRef{
+				Kind: "StatefulSet",
+				Name: "test-statefulset",
+			},
+			WakeAt:   wakeAt,
+			SleepAt:  sleepAt,
+			Timezone: timezone,
+		},
+	}
+
+	// Create a Fake Client with this object pre-loaded
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(deploymentSleepOrder, statefulsetSleepOrder).
+		WithObjects(deployment, statefulset, deploymentSleepOrder, statefulsetSleepOrder).
+		Build()
+
+	// Create the Reconciler with the fake client
+	r := &SleepOrderReconciler{
+		Client: cl,
+		Scheme: scheme,
+	}
+
+	ctx := context.Background()
+	tests := []struct {
+		name   string
+		object client.Object
+	}{
+		{"Deployment", deploymentSleepOrder},
+		{"StatefulSet", statefulsetSleepOrder},
+	}
+
+	for _, tt := range tests {
+		req := ctrl.Request{
+			NamespacedName: client.ObjectKeyFromObject(tt.object),
+		}
+		result, err := r.Reconcile(ctx, req)
+		if err != nil {
+			t.Fatalf("Reconcile failed: %v", err)
+		}
+		// expect replicas will be 0, and result will be RequeueAfter the wakeAt time
+		nextEvent, _, err := logic.GetNextEvent(
+			time.Now().UTC(), // Format times in UTC
+			tt.object.(*sleepodv1alpha1.SleepOrder).Spec.WakeAt,
+			tt.object.(*sleepodv1alpha1.SleepOrder).Spec.SleepAt,
+			tt.object.(*sleepodv1alpha1.SleepOrder).Spec.Timezone,
+		)
+		if err != nil {
+			t.Fatalf("GetNextEvent failed: %v", err)
+		}
+		switch tt.object.(*sleepodv1alpha1.SleepOrder).Spec.TargetRef.Kind {
+		case "Deployment":
+			updatedDeployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.object.(*sleepodv1alpha1.SleepOrder).Spec.TargetRef.Name,
+					Namespace: "default",
+				},
+			}
+			err = cl.Get(ctx, client.ObjectKeyFromObject(updatedDeployment), updatedDeployment)
+			if err != nil {
+				t.Fatalf("failed to get updated deployment: %v", err)
+			}
+			if *updatedDeployment.Spec.Replicas != 0 {
+				t.Errorf("expected replicas '%d', got '%d'", 0, *updatedDeployment.Spec.Replicas)
+			}
+			// Check that the RequeueAfter is close to the next event +- 1 second
+			diff := result.RequeueAfter - time.Until(nextEvent)
+			if diff < -time.Second || diff > time.Second {
+				t.Errorf("expected RequeueAfter '%v', got '%v'", time.Until(nextEvent), result.RequeueAfter)
+			}
+			// Check sleepOrder status is sleeping
+			updatedSleepOrder := &sleepodv1alpha1.SleepOrder{}
+			err = cl.Get(ctx, client.ObjectKeyFromObject(tt.object), updatedSleepOrder)
+			if err != nil {
+				t.Fatalf("failed to get updated sleeporder: %v", err)
+			}
+			if updatedSleepOrder.Status.CurrentState != sleepingState {
+				t.Errorf("expected CurrentState '%s', got '%v'", sleepingState, updatedSleepOrder.Status.CurrentState)
+			}
+		case "StatefulSet":
+			updatedStatefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.object.(*sleepodv1alpha1.SleepOrder).Spec.TargetRef.Name,
+					Namespace: "default",
+				},
+			}
+			err = cl.Get(ctx, client.ObjectKeyFromObject(updatedStatefulSet), updatedStatefulSet)
+			if err != nil {
+				t.Fatalf("failed to get updated statefulset: %v", err)
+			}
+			if *updatedStatefulSet.Spec.Replicas != 0 {
+				t.Errorf("expected replicas '%d', got '%d'", 0, *updatedStatefulSet.Spec.Replicas)
+			}
+			// Check that the RequeueAfter is close to the next event +- 1 second
+			diff := result.RequeueAfter - time.Until(nextEvent)
+			if diff < -time.Second || diff > time.Second {
+				t.Errorf("expected RequeueAfter '%v', got '%v'", time.Until(nextEvent), result.RequeueAfter)
+			}
+			// Check sleepOrder status is sleeping
+			updatedSleepOrder := &sleepodv1alpha1.SleepOrder{}
+			err = cl.Get(ctx, client.ObjectKeyFromObject(tt.object), updatedSleepOrder)
+			if err != nil {
+				t.Fatalf("failed to get updated sleeporder: %v", err)
+			}
+			if updatedSleepOrder.Status.CurrentState != sleepingState {
+				t.Errorf("expected CurrentState '%s', got '%v'", sleepingState, updatedSleepOrder.Status.CurrentState)
+			}
+		default:
+			t.Fatalf("unknown resource type: %T", tt.object)
+		}
+	}
 }
 
 func TestReconcile_wakeFlow(t *testing.T) {
-	// TODO: Test Reconcile wake flow
+	// TODO: implement
 }
