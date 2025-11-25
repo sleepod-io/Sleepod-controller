@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -12,11 +13,11 @@ import (
 )
 
 func TestSnapshotReplicas(t *testing.T) {
-	// 1. Setup Scheme (to know about Deployment types)
+	// Setup Scheme (to know about Deployment types)
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
 
-	// 2. Create a "Fake" Deployment
+	// Create a "Fake" Deployment
 	replicas := int32(5)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -28,7 +29,7 @@ func TestSnapshotReplicas(t *testing.T) {
 		},
 	}
 
-	// 2. Create a "Fake" StatefulSet
+	// Create a "Fake" StatefulSet
 	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-statefulset",
@@ -39,23 +40,19 @@ func TestSnapshotReplicas(t *testing.T) {
 		},
 	}
 
-	// 3. Create a Fake Client with this object pre-loaded
+	// Create a Fake Client with this object pre-loaded
 	cl := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(deployment, statefulset).
 		Build()
 
-	// 4. Create the Reconciler with the fake client
+	// Create the Reconciler with the fake client
 	r := &SleepOrderReconciler{
 		Client: cl,
 		Scheme: scheme,
 	}
 
-	// 5. Call the function (we haven't written it yet!)
 	ctx := context.Background()
-	// We need to fetch the object first to pass it, or the function fetches it?
-	// Let's assume the function takes the object as an argument for now,
-	// or we pass the key. Let's pass the object to keep it simple.
 	tests := []struct {
 		name   string
 		object client.Object
@@ -65,7 +62,7 @@ func TestSnapshotReplicas(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := r.snapshotReplicas(ctx, tt.object)
+		currentReplicas, err := r.snapshotReplicas(ctx, tt.object)
 		if err != nil {
 			t.Fatalf("snapshotReplicas failed: %v", err)
 		}
@@ -81,8 +78,8 @@ func TestSnapshotReplicas(t *testing.T) {
 			if !ok {
 				t.Error("annotation 'sleepod.io/original-replicas' not found")
 			}
-			if val != "5" {
-				t.Errorf("expected annotation '5', got '%s'", val)
+			if val != strconv.Itoa(int(currentReplicas)) {
+				t.Errorf("expected annotation '%d', got '%s'", currentReplicas, val)
 			}
 		case *appsv1.StatefulSet:
 			updatedStatefulSet := tt.object.(*appsv1.StatefulSet)
@@ -94,8 +91,8 @@ func TestSnapshotReplicas(t *testing.T) {
 			if !ok {
 				t.Error("annotation 'sleepod.io/original-replicas' not found")
 			}
-			if val != "5" {
-				t.Errorf("expected annotation '5', got '%s'", val)
+			if val != strconv.Itoa(int(currentReplicas)) {
+				t.Errorf("expected annotation '%d', got '%s'", currentReplicas, val)
 			}
 		default:
 			t.Fatalf("unknown resource type: %T", tt.object)
@@ -104,11 +101,11 @@ func TestSnapshotReplicas(t *testing.T) {
 }
 
 func TestRestoreReplicas(t *testing.T) {
-	// 1. Setup Scheme (to know about Deployment types)
+	// Setup Scheme (to know about Deployment types)
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
 
-	// 2. Create a "Fake" Deployment
+	// Create a "Fake" Deployment
 	replicas := int32(0)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -123,7 +120,7 @@ func TestRestoreReplicas(t *testing.T) {
 		},
 	}
 
-	// 2. Create a "Fake" StatefulSet
+	// Create a "Fake" StatefulSet
 	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-statefulset",
@@ -137,23 +134,19 @@ func TestRestoreReplicas(t *testing.T) {
 		},
 	}
 
-	// 3. Create a Fake Client with this object pre-loaded
+	// Create a Fake Client with this object pre-loaded
 	cl := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(deployment, statefulset).
 		Build()
 
-	// 4. Create the Reconciler with the fake client
+	// Create the Reconciler with the fake client
 	r := &SleepOrderReconciler{
 		Client: cl,
 		Scheme: scheme,
 	}
 
-	// 5. Call the function (we haven't written it yet!)
 	ctx := context.Background()
-	// We need to fetch the object first to pass it, or the function fetches it?
-	// Let's assume the function takes the object as an argument for now,
-	// or we pass the key. Let's pass the object to keep it simple.
 	tests := []struct {
 		name   string
 		object client.Object
@@ -163,7 +156,7 @@ func TestRestoreReplicas(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := r.restoreReplicas(ctx, tt.object)
+		originalReplicas, err := r.restoreReplicas(ctx, tt.object)
 		if err != nil {
 			t.Fatalf("restoreReplicas failed: %v", err)
 		}
@@ -175,8 +168,8 @@ func TestRestoreReplicas(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to get updated deployment: %v", err)
 			}
-			if *updatedDeployment.Spec.Replicas != 5 {
-				t.Errorf("expected replicas '5', got '%d'", *updatedDeployment.Spec.Replicas)
+			if *updatedDeployment.Spec.Replicas != originalReplicas {
+				t.Errorf("expected replicas '%d', got '%d'", originalReplicas, *updatedDeployment.Spec.Replicas)
 			}
 			// Verify that the annotation was removed
 			if _, ok := updatedDeployment.Annotations[annotationKey]; ok {
@@ -188,8 +181,8 @@ func TestRestoreReplicas(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to get updated statefulset: %v", err)
 			}
-			if *updatedStatefulSet.Spec.Replicas != 5 {
-				t.Errorf("expected replicas '5', got '%d'", *updatedStatefulSet.Spec.Replicas)
+			if *updatedStatefulSet.Spec.Replicas != originalReplicas {
+				t.Errorf("expected replicas '%d', got '%d'", originalReplicas, *updatedStatefulSet.Spec.Replicas)
 			}
 			// Verify that the annotation was removed
 			if _, ok := updatedStatefulSet.Annotations[annotationKey]; ok {
