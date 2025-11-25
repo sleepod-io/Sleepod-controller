@@ -42,6 +42,8 @@ type SleepOrderReconciler struct {
 
 const (
 	annotationKey string = "sleepod.io/original-replicas"
+	sleepingState string = "Sleeping"
+	awakeState    string = "Awake"
 )
 
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders,verbs=get;list;watch;create;update;patch;delete
@@ -185,7 +187,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 		// TODO: make the currentState enum of SleepOrderStatus.
-		SleepOrderObj.Status.CurrentState = "Sleeping"
+		SleepOrderObj.Status.CurrentState = sleepingState
 		if SleepOrderObj.Status.LastTransitionTime == nil {
 			SleepOrderObj.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
 		}
@@ -215,7 +217,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return ctrl.Result{}, err
 			}
 		}
-		SleepOrderObj.Status.CurrentState = "Awake"
+		SleepOrderObj.Status.CurrentState = awakeState
 		if SleepOrderObj.Status.LastTransitionTime == nil {
 			SleepOrderObj.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
 		}

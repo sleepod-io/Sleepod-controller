@@ -329,8 +329,8 @@ func TestReconcile_sleepFlow(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to get updated sleeporder: %v", err)
 			}
-			if updatedSleepOrder.Status.CurrentState != "Sleeping" {
-				t.Errorf("expected CurrentState 'Sleeping', got '%v'", updatedSleepOrder.Status.CurrentState)
+			if updatedSleepOrder.Status.CurrentState != sleepingState {
+				t.Errorf("expected CurrentState '%s', got '%v'", sleepingState, updatedSleepOrder.Status.CurrentState)
 			}
 		case "StatefulSet":
 			updatedStatefulSet := &appsv1.StatefulSet{
@@ -357,8 +357,8 @@ func TestReconcile_sleepFlow(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to get updated sleeporder: %v", err)
 			}
-			if updatedSleepOrder.Status.CurrentState != "Sleeping" {
-				t.Errorf("expected CurrentState 'Sleeping', got '%v'", updatedSleepOrder.Status.CurrentState)
+			if updatedSleepOrder.Status.CurrentState != sleepingState {
+				t.Errorf("expected CurrentState '%s', got '%v'", sleepingState, updatedSleepOrder.Status.CurrentState)
 			}
 		default:
 			t.Fatalf("unknown resource type: %T", tt.object)
