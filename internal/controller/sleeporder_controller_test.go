@@ -21,87 +21,98 @@ func TestSnapshotReplicas(t *testing.T) {
 	// Setup Scheme (to know about Deployment types)
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
-
-	// Create a "Fake" Deployment
 	replicas := int32(5)
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-deployment",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-		},
-	}
 
-	// Create a "Fake" StatefulSet
-	statefulset := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-statefulset",
-			Namespace: "default",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
-		},
-	}
-
-	// Create a Fake Client with this object pre-loaded
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(deployment, statefulset).
-		Build()
-
-	// Create the Reconciler with the fake client
-	r := &SleepOrderReconciler{
-		Client: cl,
-		Scheme: scheme,
-	}
-
-	ctx := context.Background()
 	tests := []struct {
 		name   string
 		object client.Object
+		expectReplicas int32
 	}{
-		{"Deployment", deployment},
-		{"StatefulSet", statefulset},
+		{
+			name: "Test deployment with replicas 5",
+			expectReplicas: replicas,
+			object: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment",
+					Namespace: "default",
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: &replicas,
+				},
+			},
+		},
+		{
+			name: "Test statefulset with replicas 5",
+			expectReplicas: replicas,
+			object: &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset",
+					Namespace: "default",
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: &replicas,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
-		currentReplicas, err := r.snapshotReplicas(ctx, tt.object)
-		if err != nil {
-			t.Fatalf("snapshotReplicas failed: %v", err)
-		}
-		// Check that the annotation was added
-		switch tt.object.(type) {
-		case *appsv1.Deployment:
-			updatedDeployment := tt.object.(*appsv1.Deployment)
-			err = cl.Get(ctx, client.ObjectKeyFromObject(deployment), updatedDeployment)
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a Fake Client with this object pre-loaded
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.object).
+				Build()
+
+			// Create the Reconciler with the fake client
+			r := &SleepOrderReconciler{
+				Client: cl,
+				Scheme: scheme,
+			}
+
+			ctx := context.Background()
+			currentReplicas, err := r.snapshotReplicas(ctx, tt.object)
 			if err != nil {
-				t.Fatalf("failed to get updated deployment: %v", err)
+				t.Fatalf("snapshotReplicas failed: %v", err)	
 			}
-			val, ok := updatedDeployment.Annotations["sleepod.io/original-replicas"]
-			if !ok {
-				t.Error("annotation 'sleepod.io/original-replicas' not found")
+			// Check that the annotation was added
+			switch tt.object.(type) {
+			case *appsv1.Deployment:
+				updatedDeployment := tt.object.(*appsv1.Deployment)
+				err = cl.Get(ctx, client.ObjectKeyFromObject(tt.object), updatedDeployment)
+				if err != nil {
+					t.Fatalf("failed to get updated deployment: %v", err)
+				}
+				val, ok := updatedDeployment.Annotations[annotationKey]
+				if !ok {
+					t.Error("annotation " + annotationKey + " not found")
+				}
+				if val != strconv.Itoa(int(tt.expectReplicas)) {
+					t.Errorf("expected annotation '%d', got '%s'", tt.expectReplicas, val)
+				}
+				if currentReplicas != tt.expectReplicas {
+					t.Errorf("expected replicas '%d', got '%d'", tt.expectReplicas, currentReplicas)
+				}
+			case *appsv1.StatefulSet:
+				updatedStatefulSet := tt.object.(*appsv1.StatefulSet)
+				err = cl.Get(ctx, client.ObjectKeyFromObject(tt.object), updatedStatefulSet)
+				if err != nil {
+					t.Fatalf("failed to get updated statefulset: %v", err)
+				}
+				val, ok := updatedStatefulSet.Annotations[annotationKey]
+				if !ok {
+					t.Error("annotation " + annotationKey + " not found")
+				}
+				if val != strconv.Itoa(int(tt.expectReplicas)) {
+					t.Errorf("expected annotation '%d', got '%s'", tt.expectReplicas, val)
+				}
+				if currentReplicas != tt.expectReplicas {
+					t.Errorf("expected replicas '%d', got '%d'", tt.expectReplicas, currentReplicas)
+				}
+			default:
+				t.Fatalf("unknown resource type: %T", tt.object)
 			}
-			if val != strconv.Itoa(int(currentReplicas)) {
-				t.Errorf("expected annotation '%d', got '%s'", currentReplicas, val)
-			}
-		case *appsv1.StatefulSet:
-			updatedStatefulSet := tt.object.(*appsv1.StatefulSet)
-			err = cl.Get(ctx, client.ObjectKeyFromObject(statefulset), updatedStatefulSet)
-			if err != nil {
-				t.Fatalf("failed to get updated statefulset: %v", err)
-			}
-			val, ok := updatedStatefulSet.Annotations["sleepod.io/original-replicas"]
-			if !ok {
-				t.Error("annotation 'sleepod.io/original-replicas' not found")
-			}
-			if val != strconv.Itoa(int(currentReplicas)) {
-				t.Errorf("expected annotation '%d', got '%s'", currentReplicas, val)
-			}
-		default:
-			t.Fatalf("unknown resource type: %T", tt.object)
-		}
+		})
 	}
 }
 
