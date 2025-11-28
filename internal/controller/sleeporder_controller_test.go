@@ -24,12 +24,12 @@ func TestSnapshotReplicas(t *testing.T) {
 	replicas := int32(5)
 
 	tests := []struct {
-		name   string
-		object client.Object
+		name           string
+		object         client.Object
 		expectReplicas int32
 	}{
 		{
-			name: "Test deployment with replicas 5",
+			name:           "Test deployment with replicas 5",
 			expectReplicas: replicas,
 			object: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
@@ -42,7 +42,7 @@ func TestSnapshotReplicas(t *testing.T) {
 			},
 		},
 		{
-			name: "Test statefulset with replicas 5",
+			name:           "Test statefulset with replicas 5",
 			expectReplicas: replicas,
 			object: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -73,9 +73,9 @@ func TestSnapshotReplicas(t *testing.T) {
 			ctx := context.Background()
 			currentReplicas, err := r.snapshotReplicas(ctx, tt.object)
 			if err != nil {
-				t.Fatalf("snapshotReplicas failed: %v", err)	
+				t.Fatalf("snapshotReplicas failed: %v", err)
 			}
-			// Check that the annotation was added
+			// Verify that the annotation was added
 			switch tt.object.(type) {
 			case *appsv1.Deployment:
 				updatedDeployment := tt.object.(*appsv1.Deployment)
@@ -123,15 +123,15 @@ func TestRestoreReplicas(t *testing.T) {
 	replicas := int32(0)
 
 	tests := []struct {
-		name   string
-		object client.Object
+		name           string
+		object         client.Object
 		expectReplicas int32
 	}{
 		{
 			name: "Test deployment with replicas 0",
 			// TODO: make replicas 5 as a global value.
 			expectReplicas: 5,
-			object:  &appsv1.Deployment{
+			object: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-deployment",
 					Namespace: "default",
@@ -145,9 +145,9 @@ func TestRestoreReplicas(t *testing.T) {
 			},
 		},
 		{
-			name: "Test statefulset with replicas 0",
+			name:           "Test statefulset with replicas 0",
 			expectReplicas: 5,
-			object:  &appsv1.StatefulSet{
+			object: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-statefulset",
 					Namespace: "default",
@@ -166,9 +166,9 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a Fake Client with this object pre-loaded
 			cl := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(tt.object).
-			Build()
+				WithScheme(scheme).
+				WithObjects(tt.object).
+				Build()
 
 			// Create the Reconciler with the fake client
 			r := &SleepOrderReconciler{
@@ -230,11 +230,10 @@ func TestReconcile_sleepFlow(t *testing.T) {
 		name             string
 		targetObj        client.Object
 		sleepOrder       *sleepodv1alpha1.SleepOrder
-		initialReplicas  int32
 		expectedReplicas int32
 	}{
 		{
-			name: "Deployment with 3 replicas",
+			name: "Deployment currently awake with 3 replicas",
 			targetObj: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-deployment-3",
@@ -259,11 +258,10 @@ func TestReconcile_sleepFlow(t *testing.T) {
 					Timezone: timezone,
 				},
 			},
-			initialReplicas:  3,
 			expectedReplicas: 0,
 		},
 		{
-			name: "StatefulSet with 3 replicas",
+			name: "StatefulSet currently awake with 3 replicas",
 			targetObj: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-statefulset-3",
@@ -288,11 +286,10 @@ func TestReconcile_sleepFlow(t *testing.T) {
 					Timezone: timezone,
 				},
 			},
-			initialReplicas:  3,
 			expectedReplicas: 0,
 		},
 		{
-			name: "Deployment with 0 replicas",
+			name: "Deployment currently sleep",
 			targetObj: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-deployment-0",
@@ -317,11 +314,10 @@ func TestReconcile_sleepFlow(t *testing.T) {
 					Timezone: timezone,
 				},
 			},
-			initialReplicas:  0,
 			expectedReplicas: 0,
 		},
 		{
-			name: "StatefulSet with 0 replicas",
+			name: "StatefulSet currently sleep",
 			targetObj: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-statefulset-0",
@@ -346,7 +342,6 @@ func TestReconcile_sleepFlow(t *testing.T) {
 					Timezone: timezone,
 				},
 			},
-			initialReplicas:  0,
 			expectedReplicas: 0,
 		},
 	}
@@ -384,7 +379,6 @@ func TestReconcile_sleepFlow(t *testing.T) {
 				t.Fatalf("GetNextEvent failed: %v", err)
 			}
 
-			// Check target object replicas
 			switch target := tt.targetObj.(type) {
 			case *appsv1.Deployment:
 				updatedDeployment := &appsv1.Deployment{}
@@ -406,13 +400,13 @@ func TestReconcile_sleepFlow(t *testing.T) {
 				}
 			}
 
-			// Check that the RequeueAfter is close to the next event +- 1 second
+			// Validate that the RequeueAfter is close to the nextEvent +- 1 second
 			diff := result.RequeueAfter - time.Until(nextEvent)
 			if diff < -time.Second || diff > time.Second {
 				t.Errorf("expected RequeueAfter '%v', got '%v'", time.Until(nextEvent), result.RequeueAfter)
 			}
 
-			// Check sleepOrder status is sleeping
+			// Validate sleepOrder status
 			updatedSleepOrder := &sleepodv1alpha1.SleepOrder{}
 			err = cl.Get(context.Background(), client.ObjectKeyFromObject(tt.sleepOrder), updatedSleepOrder)
 			if err != nil {
@@ -426,5 +420,232 @@ func TestReconcile_sleepFlow(t *testing.T) {
 }
 
 func TestReconcile_wakeFlow(t *testing.T) {
-	// TODO: implement
+	// Setup Scheme (to know about Deployment types)
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	_ = sleepodv1alpha1.AddToScheme(scheme)
+
+	wakeAt := time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+	sleepTime := time.Now().UTC().Add(time.Hour)
+	sleepAt := sleepTime.Format("15:04")
+	timezone := "UTC"
+
+	tests := []struct {
+		name                              string
+		targetObj                         client.Object
+		sleepOrder                        *sleepodv1alpha1.SleepOrder
+		expectedReplicas                  int32
+		expectedStatusOfCurrentState      string
+		expectedStatusOfNextOperationTime *metav1.Time
+	}{
+		{
+			name: "Deployment currently awake with 3 replicas",
+			targetObj: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment-3",
+					Namespace: "default",
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: func() *int32 { i := int32(3); return &i }(),
+				},
+			},
+			sleepOrder: &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment-sleeporder-3",
+					Namespace: "default",
+				},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "test-deployment-3",
+					},
+					WakeAt:   wakeAt,
+					SleepAt:  sleepAt,
+					Timezone: timezone,
+				},
+			},
+			expectedReplicas:                  3,
+			expectedStatusOfCurrentState:      awakeState,
+			expectedStatusOfNextOperationTime: &metav1.Time{Time: sleepTime},
+		},
+		{
+			name: "StatefulSet currently awake with 3 replicas",
+			targetObj: &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset-3",
+					Namespace: "default",
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: func() *int32 { i := int32(3); return &i }(),
+				},
+			},
+			sleepOrder: &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset-sleeporder-3",
+					Namespace: "default",
+				},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "StatefulSet",
+						Name: "test-statefulset-3",
+					},
+					WakeAt:   wakeAt,
+					SleepAt:  sleepAt,
+					Timezone: timezone,
+				},
+			},
+			expectedReplicas:                  3,
+			expectedStatusOfCurrentState:      awakeState,
+			expectedStatusOfNextOperationTime: &metav1.Time{Time: sleepTime},
+		},
+		{
+			name: "Deployment currently sleep",
+			targetObj: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment-0",
+					Namespace: "default",
+					Annotations: map[string]string{
+						annotationKey: "5",
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: func() *int32 { i := int32(0); return &i }(),
+				},
+			},
+			sleepOrder: &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment-sleeporder-0",
+					Namespace: "default",
+				},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "test-deployment-0",
+					},
+					WakeAt:   wakeAt,
+					SleepAt:  sleepAt,
+					Timezone: timezone,
+				},
+			},
+			expectedReplicas:                  5,
+			expectedStatusOfCurrentState:      awakeState,
+			expectedStatusOfNextOperationTime: &metav1.Time{Time: sleepTime},
+		},
+		{
+			name: "StatefulSet currently sleep",
+			targetObj: &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset-0",
+					Namespace: "default",
+					Annotations: map[string]string{
+						annotationKey: "5",
+					},
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: func() *int32 { i := int32(0); return &i }(),
+				},
+			},
+			sleepOrder: &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset-sleeporder-0",
+					Namespace: "default",
+				},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "StatefulSet",
+						Name: "test-statefulset-0",
+					},
+					WakeAt:   wakeAt,
+					SleepAt:  sleepAt,
+					Timezone: timezone,
+				},
+			},
+			expectedReplicas:                  5,
+			expectedStatusOfCurrentState:      awakeState,
+			expectedStatusOfNextOperationTime: &metav1.Time{Time: sleepTime},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a Fake Client with this object pre-loaded
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(tt.sleepOrder).
+				WithObjects(tt.targetObj, tt.sleepOrder).
+				Build()
+
+			// Create the Reconciler with the fake client
+			r := &SleepOrderReconciler{
+				Client: cl,
+				Scheme: scheme,
+			}
+
+			req := ctrl.Request{
+				NamespacedName: client.ObjectKeyFromObject(tt.sleepOrder),
+			}
+			result, err := r.Reconcile(context.Background(), req)
+			if err != nil {
+				t.Fatalf("Reconcile failed: %v", err)
+			}
+
+			nextEvent, _, err := logic.GetNextEvent(
+				time.Now().UTC(), // Format times in UTC
+				tt.sleepOrder.Spec.WakeAt,
+				tt.sleepOrder.Spec.SleepAt,
+				tt.sleepOrder.Spec.Timezone,
+			)
+			if err != nil {
+				t.Fatalf("GetNextEvent failed: %v", err)
+			}
+
+			var objectReplicas *int32
+			switch target := tt.targetObj.(type) {
+			case *appsv1.Deployment:
+				updatedDeployment := &appsv1.Deployment{}
+				err = cl.Get(context.Background(), client.ObjectKeyFromObject(target), updatedDeployment)
+				if err != nil {
+					t.Fatalf("failed to get updated deployment: %v", err)
+				}
+				if *updatedDeployment.Spec.Replicas != tt.expectedReplicas {
+					t.Errorf("expected replicas '%d', got '%d'", tt.expectedReplicas, *updatedDeployment.Spec.Replicas)
+				}
+				objectReplicas = updatedDeployment.Spec.Replicas
+			case *appsv1.StatefulSet:
+				updatedStatefulSet := &appsv1.StatefulSet{}
+				err = cl.Get(context.Background(), client.ObjectKeyFromObject(target), updatedStatefulSet)
+				if err != nil {
+					t.Fatalf("failed to get updated statefulset: %v", err)
+				}
+				if *updatedStatefulSet.Spec.Replicas != tt.expectedReplicas {
+					t.Errorf("expected replicas '%d', got '%d'", tt.expectedReplicas, *updatedStatefulSet.Spec.Replicas)
+				}
+				objectReplicas = updatedStatefulSet.Spec.Replicas
+			}
+
+			// Validate that the RequeueAfter is close to the nextEvent +- 1 second
+			// TODO: consider make this diff to separate func.
+			diff := result.RequeueAfter - time.Until(nextEvent)
+			if diff < -time.Second || diff > time.Second {
+				t.Errorf("expected RequeueAfter '%v', got '%v'", time.Until(nextEvent), result.RequeueAfter)
+			}
+
+			// Validate sleepOrder status
+			updatedSleepOrder := &sleepodv1alpha1.SleepOrder{}
+			err = cl.Get(context.Background(), client.ObjectKeyFromObject(tt.sleepOrder), updatedSleepOrder)
+			if err != nil {
+				t.Fatalf("failed to get updated sleeporder: %v", err)
+			}
+			if updatedSleepOrder.Status.CurrentState != tt.expectedStatusOfCurrentState {
+				t.Errorf("expected CurrentState '%s', got '%v'", tt.expectedStatusOfCurrentState, updatedSleepOrder.Status.CurrentState)
+			}
+			diffBetweenNextOperationTimeAndExpected := updatedSleepOrder.Status.NextOperationTime.Sub(tt.expectedStatusOfNextOperationTime.Time)
+			if diffBetweenNextOperationTimeAndExpected < -time.Minute || diffBetweenNextOperationTimeAndExpected > time.Minute {
+				t.Errorf("expected NextOperationTime '%v', got '%v'", tt.expectedStatusOfNextOperationTime, updatedSleepOrder.Status.NextOperationTime)
+			}
+			if *objectReplicas != *updatedSleepOrder.Status.OriginalReplicas {
+				t.Errorf("expected OriginalReplicas '%v', got '%v'", objectReplicas, updatedSleepOrder.Status.OriginalReplicas)
+			}
+		})
+	}
 }
