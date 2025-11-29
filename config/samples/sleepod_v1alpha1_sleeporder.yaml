@@ -1,9 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: test-deployment
+  name: test-deployment
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-deployment
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: test-deployment
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources: {}
+---
 apiVersion: sleepod.sleepod.io/v1alpha1
 kind: SleepOrder
 metadata:
-  labels:
-    app.kubernetes.io/name: sleepod-controller
-    app.kubernetes.io/managed-by: kustomize
-  name: sleeporder-sample
+  name: sleeporder-test-deployment
+  namespace: default
 spec:
-  # TODO(user): Add fields here
+  targetRef:
+    kind: Deployment
+    name: test-deployment
+  wakeAt: "08:00"
+  sleepAt: "09:00"
+  timezone: "UTC"
