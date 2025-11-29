@@ -128,7 +128,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	if SleepOrderObj.Status.LastTransitionTime != nil {
 		diffBetweenLastTransitionTimeAndNow := time.Since(SleepOrderObj.Status.LastTransitionTime.Time)
-		if diffBetweenLastTransitionTimeAndNow < 30*time.Second {
+		if diffBetweenLastTransitionTimeAndNow < 15*time.Second {
 			return ctrl.Result{}, nil
 		}
 	}
