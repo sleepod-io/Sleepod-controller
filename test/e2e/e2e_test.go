@@ -257,16 +257,207 @@ var _ = Describe("Manager", Ordered, func() {
 			))
 		})
 
-		// +kubebuilder:scaffold:e2e-webhooks-checks
+		Context("SleepOrder Controller", func() {
+			It("should handle Deployment sleep/wake lifecycle", func() {
+				By("creating a deployment")
+				deploymentName := "test-deployment"
+				cmd := exec.Command("kubectl", "create", "deployment", deploymentName, "--image=nginx", "--replicas=3", "-n", namespace)
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create deployment")
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput := getMetricsOutput()
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+				By("creating a SleepOrder for sleep window")
+				sleepOrderName := "test-sleeporder-deploy"
+				// Set sleep window: SleepAt 1 hour ago, WakeAt 1 hour from now -> Should be ASLEEP
+				wakeAt := time.Now().UTC().Add(time.Hour).Format("15:04")
+				sleepAt := time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+				sleepOrderYaml := fmt.Sprintf(`
+apiVersion: sleepod.sleepod.io/v1alpha1
+kind: SleepOrder
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  targetRef:
+    kind: Deployment
+    name: %s
+  wakeAt: "%s"
+  sleepAt: "%s"
+  timezone: "UTC"
+`, sleepOrderName, namespace, deploymentName, wakeAt, sleepAt)
+
+				tmpFile, err := os.CreateTemp("", "sleeporder-deploy-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer os.Remove(tmpFile.Name())
+				_, err = tmpFile.WriteString(sleepOrderYaml)
+				Expect(err).NotTo(HaveOccurred())
+				tmpFile.Close()
+
+				cmd = exec.Command("kubectl", "apply", "-f", tmpFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create SleepOrder")
+
+				By("verifying deployment is scaled down (Sleep)")
+				verifyScaledDown := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace, "-o", "jsonpath={.spec.replicas}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("0"), "Deployment should be scaled down to 0")
+				}
+				Eventually(verifyScaledDown, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("verifying SleepOrder status is Sleeping")
+				verifyStatusSleeping := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("Sleeping"), "SleepOrder status should be Sleeping")
+				}
+				Eventually(verifyStatusSleeping, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("updating SleepOrder for wake window")
+				// Set wake window: WakeAt 1 hour ago, SleepAt 1 hour from now -> Should be AWAKE
+				wakeAt = time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+				sleepAt = time.Now().UTC().Add(time.Hour).Format("15:04")
+
+				// Update the SleepOrder
+				cmd = exec.Command("kubectl", "patch", "sleeporder", sleepOrderName, "-n", namespace, "--type=merge", "-p", fmt.Sprintf(`{"spec":{"wakeAt":"%s","sleepAt":"%s"}}`, wakeAt, sleepAt))
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to update SleepOrder")
+
+				By("verifying deployment is scaled up (Wake)")
+				verifyScaledUp := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace, "-o", "jsonpath={.spec.replicas}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("3"), "Deployment should be scaled up to 3")
+				}
+				Eventually(verifyScaledUp, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("verifying SleepOrder status is Awake")
+				verifyStatusAwake := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("Awake"), "SleepOrder status should be Awake")
+				}
+				Eventually(verifyStatusAwake, 2*time.Minute, time.Second).Should(Succeed())
+			})
+
+			It("should handle StatefulSet sleep/wake lifecycle", func() {
+				By("creating a statefulset")
+				stsName := "test-sts"
+				// Create a simple StatefulSet
+				stsYaml := fmt.Sprintf(`
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  selector:
+    matchLabels:
+      app: %s
+  serviceName: %s
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: %s
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+`, stsName, namespace, stsName, stsName, stsName)
+
+				tmpStsFile, err := os.CreateTemp("", "sts-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer os.Remove(tmpStsFile.Name())
+				_, err = tmpStsFile.WriteString(stsYaml)
+				Expect(err).NotTo(HaveOccurred())
+				tmpStsFile.Close()
+
+				cmd := exec.Command("kubectl", "apply", "-f", tmpStsFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create StatefulSet")
+
+				By("creating a SleepOrder for sleep window")
+				sleepOrderName := "test-sleeporder-sts"
+				// Set sleep window: SleepAt 1 hour ago, WakeAt 1 hour from now -> Should be ASLEEP
+				wakeAt := time.Now().UTC().Add(time.Hour).Format("15:04")
+				sleepAt := time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+				sleepOrderYaml := fmt.Sprintf(`
+apiVersion: sleepod.sleepod.io/v1alpha1
+kind: SleepOrder
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  targetRef:
+    kind: StatefulSet
+    name: %s
+  wakeAt: "%s"
+  sleepAt: "%s"
+  timezone: "UTC"
+`, sleepOrderName, namespace, stsName, wakeAt, sleepAt)
+
+				tmpFile, err := os.CreateTemp("", "sleeporder-sts-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer os.Remove(tmpFile.Name())
+				_, err = tmpFile.WriteString(sleepOrderYaml)
+				Expect(err).NotTo(HaveOccurred())
+				tmpFile.Close()
+
+				cmd = exec.Command("kubectl", "apply", "-f", tmpFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create SleepOrder")
+
+				By("verifying statefulset is scaled down (Sleep)")
+				verifyScaledDown := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "statefulset", stsName, "-n", namespace, "-o", "jsonpath={.spec.replicas}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("0"), "StatefulSet should be scaled down to 0")
+				}
+				Eventually(verifyScaledDown, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("verifying SleepOrder status is Sleeping")
+				verifyStatusSleeping := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("Sleeping"), "SleepOrder status should be Sleeping")
+				}
+				Eventually(verifyStatusSleeping, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("updating SleepOrder for wake window")
+				// Set wake window: WakeAt 1 hour ago, SleepAt 1 hour from now -> Should be AWAKE
+				wakeAt = time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+				sleepAt = time.Now().UTC().Add(time.Hour).Format("15:04")
+
+				// Update the SleepOrder
+				cmd = exec.Command("kubectl", "patch", "sleeporder", sleepOrderName, "-n", namespace, "--type=merge", "-p", fmt.Sprintf(`{"spec":{"wakeAt":"%s","sleepAt":"%s"}}`, wakeAt, sleepAt))
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to update SleepOrder")
+
+				By("verifying statefulset is scaled up (Wake)")
+				verifyScaledUp := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "statefulset", stsName, "-n", namespace, "-o", "jsonpath={.spec.replicas}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("3"), "StatefulSet should be scaled up to 3")
+				}
+				Eventually(verifyScaledUp, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("verifying SleepOrder status is Awake")
+				verifyStatusAwake := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("Awake"), "SleepOrder status should be Awake")
+				}
+				Eventually(verifyStatusAwake, 2*time.Minute, time.Second).Should(Succeed())
+			})
+		})
 	})
 })
 
