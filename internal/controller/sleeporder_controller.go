@@ -125,6 +125,12 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if SleepOrderObj == nil {
 		return ctrl.Result{}, nil
 	}
+	if SleepOrderObj.Status.LastTransitionTime != nil {
+		diffBetweenLastTransitionTimeAndNow := time.Since(SleepOrderObj.Status.LastTransitionTime.Time)
+		if diffBetweenLastTransitionTimeAndNow < 30*time.Second {
+			return ctrl.Result{}, nil
+		}
+	}
 	log.Info("SleepOrder fetched", "SleepOrder", SleepOrderObj)
 
 	sleepOrderSpec := SleepOrderObj.Spec
@@ -168,23 +174,18 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 	if shouldSleep {
-		currentReplicas, err := getReplicas(targetObj)
+		originalReplicas, err := r.snapshotReplicas(ctx, targetObj)
+		log.Info("reconcile sleep", "replicas", originalReplicas)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if currentReplicas != 0 {
-			currentReplicas, err = r.snapshotReplicas(ctx, targetObj)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			err = setReplicas(targetObj, 0)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			err = r.Update(ctx, targetObj)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
+		err = setReplicas(targetObj, 0)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		err = r.Update(ctx, targetObj)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 		// TODO: make the currentState enum of SleepOrderStatus.
 		SleepOrderObj.Status.CurrentState = sleepingState
@@ -192,7 +193,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			SleepOrderObj.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
 		}
 		SleepOrderObj.Status.NextOperationTime = &metav1.Time{Time: nextEvent}
-		SleepOrderObj.Status.OriginalReplicas = &currentReplicas
+		SleepOrderObj.Status.OriginalReplicas = &originalReplicas
 		err = r.Status().Update(ctx, SleepOrderObj)
 		if err != nil {
 			return ctrl.Result{}, err
