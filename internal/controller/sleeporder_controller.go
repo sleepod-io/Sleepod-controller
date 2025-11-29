@@ -49,6 +49,7 @@ const (
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;update;patch
 
 // snapshotReplicas saves the current replica count to an annotation on the target object.
 func (r *SleepOrderReconciler) snapshotReplicas(ctx context.Context, target client.Object) (int32, error) {

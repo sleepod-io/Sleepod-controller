@@ -261,7 +261,8 @@ var _ = Describe("Manager", Ordered, func() {
 			It("should handle Deployment sleep/wake lifecycle", func() {
 				By("creating a deployment")
 				deploymentName := "test-deployment"
-				cmd := exec.Command("kubectl", "create", "deployment", deploymentName, "--image=nginx", "--replicas=3", "-n", namespace)
+				cmd := exec.Command("kubectl", "create", "deployment", deploymentName,
+					"--image=nginx", "--replicas=3", "-n", namespace)
 				_, err := utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred(), "Failed to create deployment")
 
@@ -287,10 +288,10 @@ spec:
 
 				tmpFile, err := os.CreateTemp("", "sleeporder-deploy-*.yaml")
 				Expect(err).NotTo(HaveOccurred())
-				defer os.Remove(tmpFile.Name())
+				defer func() { _ = os.Remove(tmpFile.Name()) }()
 				_, err = tmpFile.WriteString(sleepOrderYaml)
 				Expect(err).NotTo(HaveOccurred())
-				tmpFile.Close()
+				Expect(tmpFile.Close()).NotTo(HaveOccurred())
 
 				cmd = exec.Command("kubectl", "apply", "-f", tmpFile.Name())
 				_, err = utils.Run(cmd)
@@ -298,7 +299,8 @@ spec:
 
 				By("verifying deployment is scaled down (Sleep)")
 				verifyScaledDown := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace, "-o", "jsonpath={.spec.replicas}")
+					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace,
+						"-o", "jsonpath={.spec.replicas}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("0"), "Deployment should be scaled down to 0")
@@ -307,7 +309,8 @@ spec:
 
 				By("verifying SleepOrder status is Sleeping")
 				verifyStatusSleeping := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}")
+					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace,
+						"-o", "jsonpath={.status.currentState}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("Sleeping"), "SleepOrder status should be Sleeping")
@@ -320,13 +323,15 @@ spec:
 				sleepAt = time.Now().UTC().Add(time.Hour).Format("15:04")
 
 				// Update the SleepOrder
-				cmd = exec.Command("kubectl", "patch", "sleeporder", sleepOrderName, "-n", namespace, "--type=merge", "-p", fmt.Sprintf(`{"spec":{"wakeAt":"%s","sleepAt":"%s"}}`, wakeAt, sleepAt))
+				cmd = exec.Command("kubectl", "patch", "sleeporder", sleepOrderName, "-n", namespace, "--type=merge", "-p",
+					fmt.Sprintf(`{"spec":{"wakeAt":"%s","sleepAt":"%s"}}`, wakeAt, sleepAt))
 				_, err = utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred(), "Failed to update SleepOrder")
 
 				By("verifying deployment is scaled up (Wake)")
 				verifyScaledUp := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace, "-o", "jsonpath={.spec.replicas}")
+					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace,
+						"-o", "jsonpath={.spec.replicas}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("3"), "Deployment should be scaled up to 3")
@@ -335,7 +340,9 @@ spec:
 
 				By("verifying SleepOrder status is Awake")
 				verifyStatusAwake := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}")
+					cmd := exec.Command(
+						"kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}",
+					)
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("Awake"), "SleepOrder status should be Awake")
@@ -371,10 +378,10 @@ spec:
 
 				tmpStsFile, err := os.CreateTemp("", "sts-*.yaml")
 				Expect(err).NotTo(HaveOccurred())
-				defer os.Remove(tmpStsFile.Name())
+				defer func() { _ = os.Remove(tmpStsFile.Name()) }()
 				_, err = tmpStsFile.WriteString(stsYaml)
 				Expect(err).NotTo(HaveOccurred())
-				tmpStsFile.Close()
+				Expect(tmpStsFile.Close()).NotTo(HaveOccurred())
 
 				cmd := exec.Command("kubectl", "apply", "-f", tmpStsFile.Name())
 				_, err = utils.Run(cmd)
@@ -402,10 +409,10 @@ spec:
 
 				tmpFile, err := os.CreateTemp("", "sleeporder-sts-*.yaml")
 				Expect(err).NotTo(HaveOccurred())
-				defer os.Remove(tmpFile.Name())
+				defer func() { _ = os.Remove(tmpFile.Name()) }()
 				_, err = tmpFile.WriteString(sleepOrderYaml)
 				Expect(err).NotTo(HaveOccurred())
-				tmpFile.Close()
+				Expect(tmpFile.Close()).NotTo(HaveOccurred())
 
 				cmd = exec.Command("kubectl", "apply", "-f", tmpFile.Name())
 				_, err = utils.Run(cmd)
@@ -422,7 +429,8 @@ spec:
 
 				By("verifying SleepOrder status is Sleeping")
 				verifyStatusSleeping := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}")
+					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace,
+						"-o", "jsonpath={.status.currentState}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("Sleeping"), "SleepOrder status should be Sleeping")
@@ -435,7 +443,8 @@ spec:
 				sleepAt = time.Now().UTC().Add(time.Hour).Format("15:04")
 
 				// Update the SleepOrder
-				cmd = exec.Command("kubectl", "patch", "sleeporder", sleepOrderName, "-n", namespace, "--type=merge", "-p", fmt.Sprintf(`{"spec":{"wakeAt":"%s","sleepAt":"%s"}}`, wakeAt, sleepAt))
+				cmd = exec.Command("kubectl", "patch", "sleeporder", sleepOrderName, "-n", namespace, "--type=merge", "-p",
+					fmt.Sprintf(`{"spec":{"wakeAt":"%s","sleepAt":"%s"}}`, wakeAt, sleepAt))
 				_, err = utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred(), "Failed to update SleepOrder")
 
@@ -450,7 +459,8 @@ spec:
 
 				By("verifying SleepOrder status is Awake")
 				verifyStatusAwake := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace, "-o", "jsonpath={.status.currentState}")
+					cmd := exec.Command("kubectl", "get", "sleeporder", sleepOrderName, "-n", namespace,
+						"-o", "jsonpath={.status.currentState}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("Awake"), "SleepOrder status should be Awake")
