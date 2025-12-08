@@ -428,7 +428,6 @@ func TestReconcile_wakeFlow(t *testing.T) {
 	wakeAt := time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
 	sleepTime := time.Now().UTC().Add(time.Hour)
 	sleepAt := sleepTime.Format("15:04")
-	timezone := "UTC"
 
 	tests := []struct {
 		name                              string
@@ -461,7 +460,7 @@ func TestReconcile_wakeFlow(t *testing.T) {
 					},
 					WakeAt:   wakeAt,
 					SleepAt:  sleepAt,
-					Timezone: timezone,
+					Timezone: defaultTimezone,
 				},
 			},
 			expectedReplicas:                  3,
@@ -491,7 +490,7 @@ func TestReconcile_wakeFlow(t *testing.T) {
 					},
 					WakeAt:   wakeAt,
 					SleepAt:  sleepAt,
-					Timezone: timezone,
+					Timezone: defaultTimezone,
 				},
 			},
 			expectedReplicas:                  3,
@@ -524,7 +523,7 @@ func TestReconcile_wakeFlow(t *testing.T) {
 					},
 					WakeAt:   wakeAt,
 					SleepAt:  sleepAt,
-					Timezone: timezone,
+					Timezone: defaultTimezone,
 				},
 			},
 			expectedReplicas:                  5,
@@ -557,7 +556,7 @@ func TestReconcile_wakeFlow(t *testing.T) {
 					},
 					WakeAt:   wakeAt,
 					SleepAt:  sleepAt,
-					Timezone: timezone,
+					Timezone: defaultTimezone,
 				},
 			},
 			expectedReplicas:                  5,
@@ -657,7 +656,6 @@ func TestSleepOrderReconciler_Delete(t *testing.T) {
 
 	hourBeforeNow := time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
 	hourAfterNow := time.Now().UTC().Add(time.Hour).Format("15:04")
-	timezone := "UTC"
 
 	tests := []struct {
 		name             string
@@ -688,7 +686,7 @@ func TestSleepOrderReconciler_Delete(t *testing.T) {
 					},
 					WakeAt:   hourBeforeNow,
 					SleepAt:  hourAfterNow,
-					Timezone: timezone,
+					Timezone: defaultTimezone,
 				},
 			},
 			expectedReplicas: 3,
@@ -719,7 +717,7 @@ func TestSleepOrderReconciler_Delete(t *testing.T) {
 					},
 					WakeAt:   hourAfterNow,
 					SleepAt:  hourBeforeNow,
-					Timezone: timezone,
+					Timezone: defaultTimezone,
 				},
 			},
 			expectedReplicas: 3,
@@ -758,7 +756,9 @@ func TestSleepOrderReconciler_Delete(t *testing.T) {
 
 			// TODO: tune this sleep when fix that on the controller.
 			time.Sleep(15 * time.Second)
-			cl.Delete(context.Background(), tt.sleepOrder)
+			if err := cl.Delete(context.Background(), tt.sleepOrder); err != nil {
+				t.Fatalf("failed to delete sleeporder: %v", err)
+			}
 
 			_, err = r.Reconcile(context.Background(), req)
 			if err != nil {
