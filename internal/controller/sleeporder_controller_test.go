@@ -649,3 +649,151 @@ func TestReconcile_wakeFlow(t *testing.T) {
 		})
 	}
 }
+
+func TestSleepOrderReconciler_Delete(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	_ = sleepodv1alpha1.AddToScheme(scheme)
+
+	hourBeforeNow := time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+	hourAfterNow := time.Now().UTC().Add(time.Hour).Format("15:04")
+	timezone := "UTC"
+
+	tests := []struct {
+		name             string
+		targetObj        client.Object
+		sleepOrder       *sleepodv1alpha1.SleepOrder
+		expectedReplicas int32
+	}{
+		{
+			name: "Deleting sleepOrder of deployment that is in awake status",
+			targetObj: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment-3",
+					Namespace: "default",
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: func() *int32 { i := int32(3); return &i }(),
+				},
+			},
+			sleepOrder: &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment-sleeporder-3",
+					Namespace: "default",
+				},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "test-deployment-3",
+					},
+					WakeAt:   hourBeforeNow,
+					SleepAt:  hourAfterNow,
+					Timezone: timezone,
+				},
+			},
+			expectedReplicas: 3,
+		},
+		{
+			name: "Deleting sleepOrder of statefulset that is in sleep status",
+			targetObj: &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset-3",
+					Namespace: "default",
+					Annotations: map[string]string{
+						annotationKey: "3",
+					},
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: func() *int32 { i := int32(0); return &i }(),
+				},
+			},
+			sleepOrder: &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset-sleeporder-3",
+					Namespace: "default",
+				},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "StatefulSet",
+						Name: "test-statefulset-3",
+					},
+					WakeAt:   hourAfterNow,
+					SleepAt:  hourBeforeNow,
+					Timezone: timezone,
+				},
+			},
+			expectedReplicas: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a Fake Client with this object pre-loaded
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(tt.sleepOrder).
+				WithObjects(tt.targetObj, tt.sleepOrder).
+				Build()
+
+			// Create the Reconciler with the fake client
+			r := &SleepOrderReconciler{
+				Client: cl,
+				Scheme: scheme,
+			}
+
+			req := ctrl.Request{
+				NamespacedName: client.ObjectKeyFromObject(tt.sleepOrder),
+			}
+			_, err := r.Reconcile(context.Background(), req)
+			if err != nil {
+				t.Fatalf("Reconcile failed: %v", err)
+			}
+
+			// Verify finalizer was added
+			updatedSleepOrder := &sleepodv1alpha1.SleepOrder{}
+			err = cl.Get(context.Background(), client.ObjectKeyFromObject(tt.sleepOrder), updatedSleepOrder)
+			if err != nil {
+				t.Fatalf("failed to get updated sleeporder: %v", err)
+			}
+
+			// TODO: tune this sleep when fix that on the controller.
+			time.Sleep(15 * time.Second)
+			cl.Delete(context.Background(), tt.sleepOrder)
+
+			_, err = r.Reconcile(context.Background(), req)
+			if err != nil {
+				t.Fatalf("Reconcile failed: %v", err)
+			}
+
+			switch target := tt.targetObj.(type) {
+			case *appsv1.Deployment:
+				updatedDeployment := &appsv1.Deployment{}
+				err = cl.Get(context.Background(), client.ObjectKeyFromObject(target), updatedDeployment)
+				if err != nil {
+					t.Fatalf("failed to get updated deployment: %v", err)
+				}
+				if *updatedDeployment.Spec.Replicas != tt.expectedReplicas {
+					t.Errorf("expected replicas '%d', got '%d'", tt.expectedReplicas, *updatedDeployment.Spec.Replicas)
+				}
+				_, ok := updatedDeployment.Annotations[annotationKey]
+				if ok {
+					t.Errorf("annotation '%s' should have been removed", annotationKey)
+				}
+			case *appsv1.StatefulSet:
+				updatedStatefulSet := &appsv1.StatefulSet{}
+				err = cl.Get(context.Background(), client.ObjectKeyFromObject(target), updatedStatefulSet)
+				if err != nil {
+					t.Fatalf("failed to get updated statefulset: %v", err)
+				}
+				if *updatedStatefulSet.Spec.Replicas != tt.expectedReplicas {
+					t.Errorf("expected replicas '%d', got '%d'", tt.expectedReplicas, *updatedStatefulSet.Spec.Replicas)
+				}
+				_, ok := updatedStatefulSet.Annotations[annotationKey]
+				if ok {
+					t.Errorf("annotation '%s' should have been removed", annotationKey)
+				}
+			}
+
+		})
+	}
+}

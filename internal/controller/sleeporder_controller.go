@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
@@ -41,9 +42,10 @@ type SleepOrderReconciler struct {
 }
 
 const (
-	annotationKey string = "sleepod.io/original-replicas"
-	sleepingState string = "Sleeping"
-	awakeState    string = "Awake"
+	annotationKey       string = "sleepod.io/original-replicas"
+	sleepingState       string = "Sleeping"
+	awakeState          string = "Awake"
+	sleepOrderFinalizer string = "sleepod.io/finalizer"
 )
 
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders,verbs=get;list;watch;create;update;patch;delete
@@ -126,6 +128,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if SleepOrderObj == nil {
 		return ctrl.Result{}, nil
 	}
+	// TODO: improve this logic.
 	if SleepOrderObj.Status.LastTransitionTime != nil {
 		diffBetweenLastTransitionTimeAndNow := time.Since(SleepOrderObj.Status.LastTransitionTime.Time)
 		if diffBetweenLastTransitionTimeAndNow < 15*time.Second {
@@ -174,12 +177,67 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if shouldSleep {
-		originalReplicas, err := r.snapshotReplicas(ctx, targetObj)
-		log.Info("reconcile sleep", "replicas", originalReplicas)
-		if err != nil {
-			return ctrl.Result{}, err
+	currentReplicas, err := getReplicas(targetObj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if SleepOrderObj.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted.
+		if !controllerutil.ContainsFinalizer(SleepOrderObj, sleepOrderFinalizer) {
+			controllerutil.AddFinalizer(SleepOrderObj, sleepOrderFinalizer)
+			if err := r.Update(ctx, SleepOrderObj); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
+	} else {
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(SleepOrderObj, sleepOrderFinalizer) {
+			if currentReplicas == 0 {
+				replicasFromAnnotation, err := r.restoreReplicas(ctx, targetObj)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				err = setReplicas(targetObj, replicasFromAnnotation)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				err = r.Update(ctx, targetObj)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
+			// remove finalizer and update it.
+			controllerutil.RemoveFinalizer(SleepOrderObj, sleepOrderFinalizer)
+			if err := r.Update(ctx, SleepOrderObj); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if shouldSleep {
+		var originalReplicas int32
+		annotations := targetObj.GetAnnotations()
+		if val, ok := annotations[annotationKey]; ok {
+			// if annotation exists, use it
+			valInt, err := strconv.Atoi(val)
+			if err != nil {
+				log.Error(err, "Failed to parse annotation")
+				return ctrl.Result{}, err
+			}
+			originalReplicas = int32(valInt)
+		} else {
+			// if annotation does not exist, snapshot
+			originalReplicas, err = r.snapshotReplicas(ctx, targetObj)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		log.Info("reconcile sleep", "replicas", originalReplicas)
+
 		err = setReplicas(targetObj, 0)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -201,10 +259,6 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		return ctrl.Result{RequeueAfter: time.Until(nextEvent)}, nil
 	} else {
-		currentReplicas, err := getReplicas(targetObj)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
 		if currentReplicas == 0 {
 			currentReplicas, err = r.restoreReplicas(ctx, targetObj)
 			if err != nil {
