@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
@@ -41,9 +42,11 @@ type SleepOrderReconciler struct {
 }
 
 const (
-	annotationKey string = "sleepod.io/original-replicas"
-	sleepingState string = "Sleeping"
-	awakeState    string = "Awake"
+	annotationKey       string = "sleepod.io/original-replicas"
+	sleepingState       string = "Sleeping"
+	awakeState          string = "Awake"
+	sleepOrderFinalizer string = "sleepod.io/finalizer"
+	defaultTimezone     string = "UTC"
 )
 
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders,verbs=get;list;watch;create;update;patch;delete
@@ -104,18 +107,8 @@ func (r *SleepOrderReconciler) restoreReplicas(ctx context.Context, target clien
 	return replicasInt32, r.Update(ctx, target)
 }
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the SleepOrder object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// TODO: add logs.
-	// TODO: refactor the reconcile function.
+	// TODO: add logs (?).
 	log := logf.FromContext(ctx)
 
 	// fetch resources
@@ -126,43 +119,16 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if SleepOrderObj == nil {
 		return ctrl.Result{}, nil
 	}
-	if SleepOrderObj.Status.LastTransitionTime != nil {
-		diffBetweenLastTransitionTimeAndNow := time.Since(SleepOrderObj.Status.LastTransitionTime.Time)
-		if diffBetweenLastTransitionTimeAndNow < 15*time.Second {
-			return ctrl.Result{}, nil
-		}
+	// TODO: improve this logic.
+	if shouldSkipReconcile(SleepOrderObj) {
+		return ctrl.Result{}, nil
 	}
 	log.Info("SleepOrder fetched", "SleepOrder", SleepOrderObj)
 
 	sleepOrderSpec := SleepOrderObj.Spec
-	objectMeta := metav1.ObjectMeta{
-		Name: sleepOrderSpec.TargetRef.Name,
-	}
-	var targetObj client.Object
-	switch sleepOrderSpec.TargetRef.Kind {
-	case "Deployment":
-		deployment := &appsv1.Deployment{
-			ObjectMeta: objectMeta,
-		}
-		err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: sleepOrderSpec.TargetRef.Name}, deployment)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		targetObj = deployment
-	case "StatefulSet":
-		statefulSet := &appsv1.StatefulSet{
-			ObjectMeta: objectMeta,
-		}
-		err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: sleepOrderSpec.TargetRef.Name}, statefulSet)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		targetObj = statefulSet
-	default:
-		return ctrl.Result{}, fmt.Errorf("unsupported resource type: %s", SleepOrderObj.Spec.TargetRef.Kind)
-	}
-	if targetObj == nil {
-		return ctrl.Result{}, fmt.Errorf("target object not found")
+	targetObj, err := r.getTargetObject(ctx, req.Namespace, sleepOrderSpec.TargetRef)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// calculate Time State
@@ -174,13 +140,133 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	currentReplicas, err := getReplicas(targetObj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if done, err := r.handleFinalizer(ctx, SleepOrderObj, targetObj, currentReplicas); done {
+		return ctrl.Result{}, err
+	}
+
 	if shouldSleep {
-		originalReplicas, err := r.snapshotReplicas(ctx, targetObj)
-		log.Info("reconcile sleep", "replicas", originalReplicas)
+		return r.handleSleep(ctx, SleepOrderObj, targetObj, nextEvent)
+	}
+	return r.handleWake(ctx, SleepOrderObj, targetObj, currentReplicas, nextEvent)
+}
+
+func shouldSkipReconcile(sleepOrder *sleepodv1alpha1.SleepOrder) bool {
+	if sleepOrder.Status.LastTransitionTime != nil {
+		diffBetweenLastTransitionTimeAndNow := time.Since(sleepOrder.Status.LastTransitionTime.Time)
+		if diffBetweenLastTransitionTimeAndNow < 15*time.Second {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *SleepOrderReconciler) getTargetObject(ctx context.Context, namespace string, targetRef sleepodv1alpha1.TargetRef) (client.Object, error) {
+	objectMeta := metav1.ObjectMeta{
+		Name: targetRef.Name,
+	}
+	var targetObj client.Object
+	switch targetRef.Kind {
+	case "Deployment":
+		targetObj = &appsv1.Deployment{ObjectMeta: objectMeta}
+	case "StatefulSet":
+		targetObj = &appsv1.StatefulSet{ObjectMeta: objectMeta}
+	default:
+		return nil, fmt.Errorf("unsupported resource type: %s", targetRef.Kind)
+	}
+
+	err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: targetRef.Name}, targetObj)
+	if err != nil {
+		return nil, err
+	}
+	return targetObj, nil
+}
+
+func (r *SleepOrderReconciler) handleFinalizer(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, targetObj client.Object, currentReplicas int32) (bool, error) {
+	if sleepOrder.DeletionTimestamp.IsZero() {
+		// The object is not being deleted.
+		if !controllerutil.ContainsFinalizer(sleepOrder, sleepOrderFinalizer) {
+			controllerutil.AddFinalizer(sleepOrder, sleepOrderFinalizer)
+			if err := r.Update(ctx, sleepOrder); err != nil {
+				return true, err
+			}
+		}
+		return false, nil
+	}
+
+	// The object is being deleted
+	if controllerutil.ContainsFinalizer(sleepOrder, sleepOrderFinalizer) {
+		if currentReplicas == 0 {
+			replicasFromAnnotation, err := r.restoreReplicas(ctx, targetObj)
+			if err != nil {
+				return true, err
+			}
+			err = setReplicas(targetObj, replicasFromAnnotation)
+			if err != nil {
+				return true, err
+			}
+			err = r.Update(ctx, targetObj)
+			if err != nil {
+				return true, err
+			}
+		}
+
+		// remove finalizer and update it.
+		controllerutil.RemoveFinalizer(sleepOrder, sleepOrderFinalizer)
+		if err := r.Update(ctx, sleepOrder); err != nil {
+			return true, err
+		}
+	}
+	return true, nil
+}
+
+func (r *SleepOrderReconciler) handleSleep(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, targetObj client.Object, nextEvent time.Time) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	var originalReplicas int32
+	annotations := targetObj.GetAnnotations()
+	if val, ok := annotations[annotationKey]; ok {
+		// if annotation exists, use it
+		valInt, err := strconv.Atoi(val)
+		if err != nil {
+			log.Error(err, "Failed to parse annotation")
+			return ctrl.Result{}, err
+		}
+		originalReplicas = int32(valInt)
+	} else {
+		// if annotation does not exist, snapshot
+		var err error
+		originalReplicas, err = r.snapshotReplicas(ctx, targetObj)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		err = setReplicas(targetObj, 0)
+	}
+
+	log.Info("reconcile sleep", "replicas", originalReplicas)
+
+	err := setReplicas(targetObj, 0)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	err = r.Update(ctx, targetObj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return r.updateStatus(ctx, sleepOrder, sleepingState, nextEvent, &originalReplicas)
+}
+
+func (r *SleepOrderReconciler) handleWake(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, targetObj client.Object, currentReplicas int32, nextEvent time.Time) (ctrl.Result, error) {
+	if currentReplicas == 0 {
+		restoredReplicas, err := r.restoreReplicas(ctx, targetObj)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		err = setReplicas(targetObj, restoredReplicas)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -188,49 +274,23 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		// TODO: make the currentState enum of SleepOrderStatus.
-		SleepOrderObj.Status.CurrentState = sleepingState
-		if SleepOrderObj.Status.LastTransitionTime == nil {
-			SleepOrderObj.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
-		}
-		SleepOrderObj.Status.NextOperationTime = &metav1.Time{Time: nextEvent}
-		SleepOrderObj.Status.OriginalReplicas = &originalReplicas
-		err = r.Status().Update(ctx, SleepOrderObj)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: time.Until(nextEvent)}, nil
-	} else {
-		currentReplicas, err := getReplicas(targetObj)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if currentReplicas == 0 {
-			currentReplicas, err = r.restoreReplicas(ctx, targetObj)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			err = setReplicas(targetObj, currentReplicas)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			err = r.Update(ctx, targetObj)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		SleepOrderObj.Status.CurrentState = awakeState
-		if SleepOrderObj.Status.LastTransitionTime == nil {
-			SleepOrderObj.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
-		}
-		SleepOrderObj.Status.NextOperationTime = &metav1.Time{Time: nextEvent}
-		SleepOrderObj.Status.OriginalReplicas = &currentReplicas
-		err = r.Status().Update(ctx, SleepOrderObj)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: time.Until(nextEvent)}, nil
+		currentReplicas = restoredReplicas
 	}
+	return r.updateStatus(ctx, sleepOrder, awakeState, nextEvent, &currentReplicas)
+}
+
+func (r *SleepOrderReconciler) updateStatus(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, state string, nextEvent time.Time, originalReplicas *int32) (ctrl.Result, error) {
+	sleepOrder.Status.CurrentState = state
+	if sleepOrder.Status.LastTransitionTime == nil {
+		sleepOrder.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
+	}
+	sleepOrder.Status.NextOperationTime = &metav1.Time{Time: nextEvent}
+	sleepOrder.Status.OriginalReplicas = originalReplicas
+	err := r.Status().Update(ctx, sleepOrder)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{RequeueAfter: time.Until(nextEvent)}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
