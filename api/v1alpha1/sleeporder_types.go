@@ -54,7 +54,10 @@ type SleepOrderStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +kubebuilder:printcolumn:name="CurrentState",type="string",JSONPath=".status.currentState"
+// +kubebuilder:printcolumn:name="OriginalReplicas",type="integer",JSONPath=".status.originalReplicas"
+// +kubebuilder:printcolumn:name="LastTransitionTime",type="date",JSONPath=".status.lastTransitionTime"
+// +kubebuilder:printcolumn:name="NextOperationTime",type="string",JSONPath=".status.nextOperationTime"
 // SleepOrder is the Schema for the sleeporders API
 type SleepOrder struct {
 	metav1.TypeMeta `json:",inline"`

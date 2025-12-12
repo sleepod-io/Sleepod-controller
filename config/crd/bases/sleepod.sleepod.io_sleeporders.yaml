@@ -14,7 +14,20 @@ spec:
     singular: sleeporder
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.currentState
+      name: CurrentState
+      type: string
+    - jsonPath: .status.originalReplicas
+      name: OriginalReplicas
+      type: integer
+    - jsonPath: .status.lastTransitionTime
+      name: LastTransitionTime
+      type: date
+    - jsonPath: .status.nextOperationTime
+      name: NextOperationTime
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: SleepOrder is the Schema for the sleeporders API

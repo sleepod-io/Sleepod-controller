@@ -154,6 +154,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.handleSleep(ctx, SleepOrderObj, targetObj, nextEvent)
 	}
 	return r.handleWake(ctx, SleepOrderObj, targetObj, currentReplicas, nextEvent)
+
 }
 
 func shouldSkipReconcile(sleepOrder *sleepodv1alpha1.SleepOrder) bool {
@@ -280,13 +281,20 @@ func (r *SleepOrderReconciler) handleWake(ctx context.Context, sleepOrder *sleep
 }
 
 func (r *SleepOrderReconciler) updateStatus(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, state string, nextEvent time.Time, originalReplicas *int32) (ctrl.Result, error) {
-	sleepOrder.Status.CurrentState = state
-	if sleepOrder.Status.LastTransitionTime == nil {
-		sleepOrder.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
+	// Refetch the latest version of the object to avoid conflicts
+	latestSleepOrder := &sleepodv1alpha1.SleepOrder{}
+	err := r.Get(ctx, client.ObjectKeyFromObject(sleepOrder), latestSleepOrder)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	sleepOrder.Status.NextOperationTime = &metav1.Time{Time: nextEvent}
-	sleepOrder.Status.OriginalReplicas = originalReplicas
-	err := r.Status().Update(ctx, sleepOrder)
+
+	latestSleepOrder.Status.CurrentState = state
+	if latestSleepOrder.Status.LastTransitionTime == nil {
+		latestSleepOrder.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
+	}
+	latestSleepOrder.Status.NextOperationTime = &metav1.Time{Time: nextEvent}
+	latestSleepOrder.Status.OriginalReplicas = originalReplicas
+	err = r.Status().Update(ctx, latestSleepOrder)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
