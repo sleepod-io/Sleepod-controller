@@ -16,16 +16,16 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.currentState
-      name: CurrentState
+      name: Current_State
       type: string
     - jsonPath: .status.originalReplicas
-      name: OriginalReplicas
+      name: Original_Replicas
       type: integer
     - jsonPath: .status.lastTransitionTime
-      name: LastTransitionTime
+      name: Last_Transition_Time
       type: date
     - jsonPath: .status.nextOperationTime
-      name: NextOperationTime
+      name: Next_Operation_Time
       type: string
     name: v1alpha1
     schema:
