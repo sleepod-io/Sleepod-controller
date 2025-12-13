@@ -47,6 +47,8 @@ const (
 	awakeState          string = "Awake"
 	sleepOrderFinalizer string = "sleepod.io/finalizer"
 	defaultTimezone     string = "UTC"
+	kindDeployment      string = "Deployment"
+	kindStatefulSet     string = "StatefulSet"
 )
 
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders,verbs=get;list;watch;create;update;patch;delete
@@ -119,24 +121,23 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if SleepOrderObj == nil {
 		return ctrl.Result{}, nil
 	}
-	// TODO: improve this logic.
-	if shouldSkipReconcile(SleepOrderObj) {
-		return ctrl.Result{}, nil
-	}
+
 	log.Info("SleepOrder fetched", "SleepOrder", SleepOrderObj)
 
 	sleepOrderSpec := SleepOrderObj.Spec
 	targetObj, err := r.getTargetObject(ctx, req.Namespace, sleepOrderSpec.TargetRef)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Target object not found", "target", sleepOrderSpec.TargetRef.Name)
+			// Retry in 1 minute to see if the target appears
+			nextRetry := time.Now().Add(time.Minute)
+			return r.updateStatus(ctx, SleepOrderObj, "Error: TargetNotFound", nextRetry, nil)
+		}
 		return ctrl.Result{}, err
 	}
 
 	// calculate Time State
-	shouldSleep, err := logic.ShouldBeAsleep(time.Now(), sleepOrderSpec.WakeAt, sleepOrderSpec.SleepAt, sleepOrderSpec.Timezone)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	nextEvent, _, err := logic.GetNextEvent(time.Now(), sleepOrderSpec.WakeAt, sleepOrderSpec.SleepAt, sleepOrderSpec.Timezone)
+	shouldSleep, nextEvent, _, err := logic.GetTimeState(time.Now(), sleepOrderSpec.WakeAt, sleepOrderSpec.SleepAt, sleepOrderSpec.Timezone)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -157,25 +158,15 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 }
 
-func shouldSkipReconcile(sleepOrder *sleepodv1alpha1.SleepOrder) bool {
-	if sleepOrder.Status.LastTransitionTime != nil {
-		diffBetweenLastTransitionTimeAndNow := time.Since(sleepOrder.Status.LastTransitionTime.Time)
-		if diffBetweenLastTransitionTimeAndNow < 15*time.Second {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *SleepOrderReconciler) getTargetObject(ctx context.Context, namespace string, targetRef sleepodv1alpha1.TargetRef) (client.Object, error) {
 	objectMeta := metav1.ObjectMeta{
 		Name: targetRef.Name,
 	}
 	var targetObj client.Object
 	switch targetRef.Kind {
-	case "Deployment":
+	case kindDeployment:
 		targetObj = &appsv1.Deployment{ObjectMeta: objectMeta}
-	case "StatefulSet":
+	case kindStatefulSet:
 		targetObj = &appsv1.StatefulSet{ObjectMeta: objectMeta}
 	default:
 		return nil, fmt.Errorf("unsupported resource type: %s", targetRef.Kind)
@@ -247,7 +238,7 @@ func (r *SleepOrderReconciler) handleSleep(ctx context.Context, sleepOrder *slee
 		}
 	}
 
-	log.Info("reconcile sleep", "replicas", originalReplicas)
+	log.Info("reconcile sleep: scaling down", "target", targetObj.GetName(), "originalReplicas", originalReplicas)
 
 	err := setReplicas(targetObj, 0)
 	if err != nil {
@@ -288,17 +279,51 @@ func (r *SleepOrderReconciler) updateStatus(ctx context.Context, sleepOrder *sle
 		return ctrl.Result{}, err
 	}
 
-	latestSleepOrder.Status.CurrentState = state
-	if latestSleepOrder.Status.LastTransitionTime == nil {
-		latestSleepOrder.Status.LastTransitionTime = &metav1.Time{Time: time.Now()}
+	// Prepare new values
+	newStatus := latestSleepOrder.Status.DeepCopy()
+	newStatus.CurrentState = state
+	newStatus.NextOperationTime = &metav1.Time{Time: nextEvent}
+	newStatus.OriginalReplicas = originalReplicas
+
+	// Only update LastTransitionTime if the state has changed
+	if latestSleepOrder.Status.CurrentState != state {
+		newStatus.LastTransitionTime = &metav1.Time{Time: time.Now()}
 	}
-	latestSleepOrder.Status.NextOperationTime = &metav1.Time{Time: nextEvent}
-	latestSleepOrder.Status.OriginalReplicas = originalReplicas
+
+	// Check if status actually changed (avoid flapping)
+	if latestSleepOrder.Status.CurrentState == newStatus.CurrentState &&
+		equalTimePtr(latestSleepOrder.Status.NextOperationTime, newStatus.NextOperationTime) &&
+		equalInt32Ptr(latestSleepOrder.Status.OriginalReplicas, newStatus.OriginalReplicas) {
+		// No change needed
+		return ctrl.Result{RequeueAfter: time.Until(nextEvent)}, nil
+	}
+
+	latestSleepOrder.Status = *newStatus
 	err = r.Status().Update(ctx, latestSleepOrder)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{RequeueAfter: time.Until(nextEvent)}, nil
+}
+
+func equalTimePtr(t1, t2 *metav1.Time) bool {
+	if t1 == nil && t2 == nil {
+		return true
+	}
+	if t1 == nil || t2 == nil {
+		return false
+	}
+	return t1.Equal(t2)
+}
+
+func equalInt32Ptr(i1, i2 *int32) bool {
+	if i1 == nil && i2 == nil {
+		return true
+	}
+	if i1 == nil || i2 == nil {
+		return false
+	}
+	return *i1 == *i2
 }
 
 // SetupWithManager sets up the controller with the Manager.

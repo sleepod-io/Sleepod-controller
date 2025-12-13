@@ -754,8 +754,6 @@ func TestSleepOrderReconciler_Delete(t *testing.T) {
 				t.Fatalf("failed to get updated sleeporder: %v", err)
 			}
 
-			// TODO: tune this sleep when fix that on the controller.
-			time.Sleep(15 * time.Second)
 			if err := cl.Delete(context.Background(), tt.sleepOrder); err != nil {
 				t.Fatalf("failed to delete sleeporder: %v", err)
 			}
