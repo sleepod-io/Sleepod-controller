@@ -8,6 +8,9 @@ import (
 // ShouldBeAsleep checks if the current time falls within the sleep window.
 // It returns true if we should be sleeping, false otherwise.
 // It returns an error if the timezone is invalid or time formats are wrong.
+// ShouldBeAsleep checks if the current time falls within the sleep window.
+// It returns true if we should be sleeping, false otherwise.
+// It returns an error if the timezone is invalid or time formats are wrong.
 func ShouldBeAsleep(now time.Time, wakeAt, sleepAt, timezone string) (bool, error) {
 	state, _, _, err := GetTimeState(now, wakeAt, sleepAt, timezone)
 	return state, err
