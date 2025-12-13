@@ -90,6 +90,7 @@ spec:
                 enum:
                 - Sleeping
                 - Awake
+                - Error TargetNotFound
                 - Error
                 type: string
               lastTransitionTime:

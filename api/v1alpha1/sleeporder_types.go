@@ -45,7 +45,7 @@ type TargetRef struct {
 
 // SleepOrderStatus defines the observed state of SleepOrder.
 type SleepOrderStatus struct {
-	// +kubebuilder:validation:Enum=Sleeping;Awake;Error
+	// +kubebuilder:validation:Enum=Sleeping;Awake;Error TargetNotFound;Error
 	CurrentState       string       `json:"currentState,omitempty"`
 	OriginalReplicas   *int32       `json:"originalReplicas,omitempty"`
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
