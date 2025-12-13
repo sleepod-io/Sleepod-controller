@@ -9,25 +9,26 @@ import (
 // It returns true if we should be sleeping, false otherwise.
 // It returns an error if the timezone is invalid or time formats are wrong.
 func ShouldBeAsleep(now time.Time, wakeAt, sleepAt, timezone string) (bool, error) {
-	targetNow, err := parseTimeToLocation(now, timezone)
+	state, _, _, err := GetTimeState(now, wakeAt, sleepAt, timezone)
+	return state, err
+}
+
+// GetNextEvent returns the time and type of the next scheduled event.
+func GetNextEvent(now time.Time, wakeAt, sleepAt, timezone string) (time.Time, string, error) {
+	_, nextTime, nextEvent, err := GetTimeState(now, wakeAt, sleepAt, timezone)
+	return nextTime, nextEvent, err
+}
+
+// GetTimeState calculates both the current state (isSleep) and the next event.
+// This ensures consistency as both are derived from the exact same parsed time and schedule.
+func GetTimeState(now time.Time, wakeAt, sleepAt, timezone string) (bool, time.Time, string, error) {
+	targetNow, todayWake, todaySleep, err := parseSchedule(now, wakeAt, sleepAt, timezone)
 	if err != nil {
-		return false, err
+		return false, time.Time{}, "", err
 	}
 
-	layout := "15:04"
-	wakeParsed, err := time.Parse(layout, wakeAt)
-	if err != nil {
-		return false, fmt.Errorf("invalid wakeAt format: %w", err)
-	}
-	sleepParsed, err := time.Parse(layout, sleepAt)
-	if err != nil {
-		return false, fmt.Errorf("invalid sleepAt format: %w", err)
-	}
-
-	todayWake := time.Date(targetNow.Year(), targetNow.Month(), targetNow.Day(), wakeParsed.Hour(), wakeParsed.Minute(), 0, 0, targetNow.Location())
-	todaySleep := time.Date(targetNow.Year(), targetNow.Month(), targetNow.Day(), sleepParsed.Hour(), sleepParsed.Minute(), 0, 0, targetNow.Location())
+	// 1. Determine Current State
 	isAwake := false
-
 	if todayWake.Before(todaySleep) {
 		// Awake if: Wake <= Now < Sleep
 		if (targetNow.Equal(todayWake) || targetNow.After(todayWake)) && targetNow.Before(todaySleep) {
@@ -39,50 +40,47 @@ func ShouldBeAsleep(now time.Time, wakeAt, sleepAt, timezone string) (bool, erro
 			isAwake = true
 		}
 	}
+	shouldSleep := !isAwake
 
-	return !isAwake, nil
+	// 2. Determine Next Event
+	var nextWake, nextSleep time.Time
+	if todayWake.Before(targetNow) {
+		nextWake = todayWake.AddDate(0, 0, 1)
+	} else {
+		nextWake = todayWake
+	}
+	if todaySleep.Before(targetNow) {
+		nextSleep = todaySleep.AddDate(0, 0, 1)
+	} else {
+		nextSleep = todaySleep
+	}
+
+	if nextWake.Before(nextSleep) {
+		return shouldSleep, nextWake, "Wake", nil
+	}
+	return shouldSleep, nextSleep, "Sleep", nil
 }
 
-func GetNextEvent(now time.Time, wakeAt, sleepAt, timezone string) (time.Time, string, error) {
+func parseSchedule(now time.Time, wakeAt, sleepAt, timezone string) (time.Time, time.Time, time.Time, error) {
 	targetNow, err := parseTimeToLocation(now, timezone)
 	if err != nil {
-		return time.Time{}, "", err
+		return time.Time{}, time.Time{}, time.Time{}, err
 	}
 
 	layout := "15:04"
 	wakeParsed, err := time.Parse(layout, wakeAt)
 	if err != nil {
-		return time.Time{}, "", fmt.Errorf("invalid wakeAt format: %w", err)
+		return time.Time{}, time.Time{}, time.Time{}, fmt.Errorf("invalid wakeAt format: %w", err)
 	}
 	sleepParsed, err := time.Parse(layout, sleepAt)
 	if err != nil {
-		return time.Time{}, "", fmt.Errorf("invalid sleepAt format: %w", err)
+		return time.Time{}, time.Time{}, time.Time{}, fmt.Errorf("invalid sleepAt format: %w", err)
 	}
 
 	todayWake := time.Date(targetNow.Year(), targetNow.Month(), targetNow.Day(), wakeParsed.Hour(), wakeParsed.Minute(), 0, 0, targetNow.Location())
 	todaySleep := time.Date(targetNow.Year(), targetNow.Month(), targetNow.Day(), sleepParsed.Hour(), sleepParsed.Minute(), 0, 0, targetNow.Location())
 
-	var nextWake, nextSleep time.Time
-	if todayWake.Before(targetNow) {
-		// todayWake is already in the past, so it's tomorrow
-		nextWake = todayWake.AddDate(0, 0, 1)
-	} else {
-		// todayWake is in the future, so it's today
-		nextWake = todayWake
-	}
-	if todaySleep.Before(targetNow) {
-		// todaySleep is already in the past, so it's tomorrow
-		nextSleep = todaySleep.AddDate(0, 0, 1)
-	} else {
-		// todaySleep is in the future, so it's today
-		nextSleep = todaySleep
-	}
-
-	// pick the minimum of nextWake and nextSleep
-	if nextWake.Before(nextSleep) {
-		return nextWake, "Wake", nil
-	}
-	return nextSleep, "Sleep", nil
+	return targetNow, todayWake, todaySleep, nil
 }
 
 func parseTimeToLocation(now time.Time, timezone string) (time.Time, error) {
