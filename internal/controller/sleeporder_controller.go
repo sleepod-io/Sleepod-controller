@@ -131,7 +131,12 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			log.Info("Target object not found", "target", sleepOrderSpec.TargetRef.Name)
 			// Retry in 1 minute to see if the target appears
 			nextRetry := time.Now().Add(time.Minute)
-			return r.updateStatus(ctx, SleepOrderObj, "Error: TargetNotFound", nextRetry, nil)
+			// remove the finalizer
+			controllerutil.RemoveFinalizer(SleepOrderObj, sleepOrderFinalizer)
+			if err := r.Update(ctx, SleepOrderObj); err != nil {
+				return ctrl.Result{RequeueAfter: time.Minute}, err
+			}
+			return r.updateStatus(ctx, SleepOrderObj, "Error TargetNotFound", nextRetry, nil)
 		}
 		return ctrl.Result{}, err
 	}
