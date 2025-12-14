@@ -25,12 +25,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
+	"github.com/shaygef123/SleePod-controller/internal/config"
 )
 
 // SleepPolicyReconciler reconciles a SleepPolicy object
 type SleepPolicyReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Config *config.Config
 }
 
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeppolicies,verbs=get;list;watch;create;update;patch;delete
