@@ -1,0 +1,104 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: sleeppolicies.sleepod.sleepod.io
+spec:
+  group: sleepod.sleepod.io
+  names:
+    kind: SleepPolicy
+    listKind: SleepPolicyList
+    plural: sleeppolicies
+    singular: sleeppolicy
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SleepPolicy is the Schema for the sleeppolicies API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of SleepPolicy
+            properties:
+              deployments:
+                additionalProperties:
+                  description: PolicyConfig defines the sleep configuration for a
+                    specific resource or default.
+                  properties:
+                    enable:
+                      type: boolean
+                    sleepAt:
+                      pattern: ^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$
+                      type: string
+                    timezone:
+                      type: string
+                    wakeAt:
+                      pattern: ^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$
+                      type: string
+                  required:
+                  - enable
+                  type: object
+                description: Map of Deployments to manage. Key "default" is required
+                  for global settings.
+                type: object
+              statefulSets:
+                additionalProperties:
+                  description: PolicyConfig defines the sleep configuration for a
+                    specific resource or default.
+                  properties:
+                    enable:
+                      type: boolean
+                    sleepAt:
+                      pattern: ^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$
+                      type: string
+                    timezone:
+                      type: string
+                    wakeAt:
+                      pattern: ^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$
+                      type: string
+                  required:
+                  - enable
+                  type: object
+                description: Map of StatefulSets to manage. Key "default" is required
+                  for global settings.
+                type: object
+              timezone:
+                default: UTC
+                description: Global Timezone for the policy.
+                type: string
+            type: object
+          status:
+            description: status defines the observed state of SleepPolicy
+            properties:
+              managedResources:
+                description: List of resources currently managed by this policy.
+                items:
+                  type: string
+                type: array
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
