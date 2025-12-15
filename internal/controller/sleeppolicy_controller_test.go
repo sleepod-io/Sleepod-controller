@@ -21,16 +21,177 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
+	appsv1 "k8s.io/api/apps/v1"
+	errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
+	"github.com/shaygef123/SleePod-controller/internal/config"
 )
 
 var _ = Describe("SleepPolicy Controller", func() {
+
+	// Unit Tests for Logic
+	Context("Logic: checkAndBuildValidResource", func() {
+		var reconciler *SleepPolicyReconciler
+
+		BeforeEach(func() {
+			reconciler = &SleepPolicyReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("should add default deployment config if missing", func() {
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments:  map[string]sleepodv1alpha1.PolicyConfig{},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("default"))
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
+		})
+
+		It("should add default statefulset config if missing", func() {
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.StatefulSets).To(HaveKey("default"))
+			Expect(policy.Spec.StatefulSets["default"].Enable).To(BeTrue())
+		})
+
+		It("should prevent disabling the default config", func() {
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: false},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: false},
+					},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
+			Expect(policy.Spec.StatefulSets["default"].Enable).To(BeTrue())
+		})
+
+		It("should return false if policy is already valid", func() {
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeFalse())
+		})
+
+		It("should add default config if specific config exists but other resources exist in cluster", func() {
+			// Scenario: Policy has specific config for 'app-a', but 'app-b' exists in cluster.
+			// Logic should see 'app-b', realize it needs coverage, and ensure 'default' is present.
+			// SETUP:
+			// 1. Policy with only 'app-a'
+			// 2. Cluster with 'app-a' and 'app-b' (Deployments)
+
+			// Mock Client with existing resources
+			existingDeploymentA := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-a", Namespace: "default"}}
+			existingDeploymentB := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-b", Namespace: "default"}}
+
+			fakeClient := fake.NewClientBuilder().
+				WithObjects(existingDeploymentA, existingDeploymentB).
+				Build()
+
+			reconciler.Client = fakeClient
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-a": {Enable: true},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("default"))
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("app-a"))
+		})
+
+		It("should log error but continue if specified resource does not exist in cluster", func() {
+			// Scenario: Policy specifies 'app-ghost' which does not exist in cluster.
+			// Logic should see mismatch, log error (implied), but continue processing defaults.
+			// Also, should we remove it? User said "log error message but continue".
+			// Assuming 'continue' means we don't crash and we fix defaults.
+
+			// Mock Client with ONE other resource to ensure 'default' is needed
+			existingDeploymentOther := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-other", Namespace: "default"}}
+			fakeClient := fake.NewClientBuilder().
+				WithObjects(existingDeploymentOther).
+				Build()
+			reconciler.Client = fakeClient
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-ghost": {Enable: true},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("default"))
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("app-ghost"))
+		})
+	})
+
+	// Scaffolding Integration Tests (Preserved)
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -38,7 +199,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		sleeppolicy := &sleepodv1alpha1.SleepPolicy{}
 
@@ -58,7 +219,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
+			// TODO(user): Cleanup logic
 			resource := &sleepodv1alpha1.SleepPolicy{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -66,19 +227,21 @@ var _ = Describe("SleepPolicy Controller", func() {
 			By("Cleanup the specific resource instance SleepPolicy")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &SleepPolicyReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				// Inject default config for integration test
+				Config: config.Load(),
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			// TODO(user): Add more specific assertions depending on your controller logic
 		})
 	})
 })
