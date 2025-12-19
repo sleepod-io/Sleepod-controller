@@ -4,10 +4,13 @@ import (
 	"context"
 
 	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
+	"github.com/shaygef123/SleePod-controller/internal/config/utils"
 )
 
 // checkAndBuildValidResource validates the SleepPolicy spec and ensures mandatory defaults and cluster sync.
@@ -199,4 +202,68 @@ func (r *SleepPolicyReconciler) resolveParams(namespace, name, kind string, poli
 		WakeAt:    wakeAt,
 		Timezone:  timezone,
 	}
+}
+
+// func (r *SleepPolicyReconciler) needToDeploySleepOrder(resourceDesiredState sleepodv1alpha1.ResourceSleepParams) bool {
+// 	resourceState :=
+// 	return true
+// }
+
+func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy, resourceDesiredState sleepodv1alpha1.ResourceSleepParams, action string) error {
+	log := logf.FromContext(ctx)
+	sleepOrder := &sleepodv1alpha1.SleepOrder{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        resourceDesiredState.Namespace + "-" + resourceDesiredState.Name,
+			Namespace:   resourceDesiredState.Namespace,
+			Annotations: make(map[string]string),
+		},
+		Spec: sleepodv1alpha1.SleepOrderSpec{
+			TargetRef: sleepodv1alpha1.TargetRef{
+				Kind: resourceDesiredState.Kind,
+				Name: resourceDesiredState.Name,
+			},
+			WakeAt:   resourceDesiredState.WakeAt,
+			SleepAt:  resourceDesiredState.SleepAt,
+			Timezone: resourceDesiredState.Timezone,
+		},
+	}
+	switch action {
+	case "create":
+		sleepOrder.Annotations = map[string]string{
+			configHashAnnotationKey: utils.ConfigHashCalc(resourceDesiredState),
+		}
+		if err := controllerutil.SetControllerReference(policy, sleepOrder, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, sleepOrder); err != nil {
+			return err
+		}
+	case "update":
+		// Fetch existing resource to get ResourceVersion
+		current := &sleepodv1alpha1.SleepOrder{}
+		if err := r.Get(ctx, client.ObjectKeyFromObject(sleepOrder), current); err != nil {
+			return err // Or handle not-found if needed, but 'update' implies existence
+		}
+
+		if current.Annotations != nil && current.Annotations[configHashAnnotationKey] == utils.ConfigHashCalc(resourceDesiredState) {
+			log.Info("SleepOrder is up to date", "name", sleepOrder.Name)
+			return nil
+		}
+		sleepOrder.ResourceVersion = current.ResourceVersion
+
+		sleepOrder.Annotations[configHashAnnotationKey] = utils.ConfigHashCalc(resourceDesiredState)
+		if err := controllerutil.SetControllerReference(policy, sleepOrder, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Update(ctx, sleepOrder); err != nil {
+			return err
+		}
+	case "delete":
+		if err := r.Delete(ctx, sleepOrder); err != nil {
+			return err
+		}
+	default:
+		return nil
+	}
+	return nil
 }
