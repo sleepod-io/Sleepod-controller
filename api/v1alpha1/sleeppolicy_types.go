@@ -22,6 +22,7 @@ import (
 // ResourceSleepParams defines the sleep configuration for a specific resource or default.
 type ResourceSleepParams struct {
 	Name     string
+	Namespace string
 	Kind     string
 	SleepAt  string
 	WakeAt   string
