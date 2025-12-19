@@ -333,15 +333,24 @@ var _ = Describe("SleepPolicy Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("should delete SleepOrder resource", func() {
-			// Setup: Cluster has StatefulSet 'app-delete'
-			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "app-delete", Namespace: "default"}}
+		It("should update SleepOrder resource", func() {
+			// Setup: Cluster has Deployment 'app-update'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "default-app-delete", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-update", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "app-update",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
 			}
-			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(sts, sleepOrder).Build()
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
 
-			// Setup: Policy has StatefulSet 'app-delete'
+			// Setup: Policy has Deployment 'app-update'
 			policy = &sleepodv1alpha1.SleepPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepPolicySpec{

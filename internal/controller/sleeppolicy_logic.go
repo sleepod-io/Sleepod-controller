@@ -258,10 +258,6 @@ func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, po
 		if err := r.Update(ctx, sleepOrder); err != nil {
 			return err
 		}
-	case "delete":
-		if err := r.Delete(ctx, sleepOrder); err != nil {
-			return err
-		}
 	default:
 		return nil
 	}
