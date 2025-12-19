@@ -354,13 +354,54 @@ var _ = Describe("SleepPolicy Controller", func() {
 			policy = &sleepodv1alpha1.SleepPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepPolicySpec{
-					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
-						"app-delete": {Enable: false},
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-update": {Enable: true, WakeAt: "10:00", SleepAt: "20:00", Timezone: "CST"},
+						"default":    {Enable: true},
 					},
 				},
 			}
 			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
-				Name:      "app-delete",
+				Name:      "app-update",
+				Namespace: "default",
+				WakeAt:    "10:00",
+				SleepAt:   "20:00",
+				Timezone:  "CST",
+			}
+
+			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionUpdate)
+
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should not do anything, nothing to change", func() {
+			// Setup: Cluster has Deployment 'app-nochange'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-nochange", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-nochange", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "app-nochange",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
+
+			// Setup: Policy has Deployment 'app-nochange'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-nochange": {Enable: true, WakeAt: "08:00", SleepAt: "20:00", Timezone: "UTC"},
+						"default":      {Enable: true},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-nochange",
 				Namespace: "default",
 				WakeAt:    "08:00",
 				SleepAt:   "20:00",
