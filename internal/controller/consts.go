@@ -19,3 +19,9 @@ const (
 	sleepingState       string = "Sleeping"
 	awakeState          string = "Awake"
 )
+
+// sleepPolicy actions:
+const (
+	actionCreate string = "create"
+	actionUpdate string = "update"
+)

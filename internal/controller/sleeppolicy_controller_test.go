@@ -328,7 +328,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				Timezone:  "UTC",
 			}
 
-			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, "create")
+			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionCreate)
 
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -408,7 +408,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				Timezone:  "UTC",
 			}
 
-			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, "delete")
+			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionUpdate)
 
 			Expect(err).ToNot(HaveOccurred())
 			// expect the sleeporder to be deleted
@@ -416,8 +416,11 @@ var _ = Describe("SleepPolicy Controller", func() {
 				Name:      "default-app-delete",
 				Namespace: "default",
 			}
-			err = reconciler.Client.Get(context.Background(), sleepOrderName, &sleepodv1alpha1.SleepOrder{})
-			Expect(errors.IsNotFound(err)).To(BeTrue())
+
+			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState, policy)
+
+			Expect(needToDeploy).To(BeTrue())
+			Expect(action).To(Equal(actionCreate))
 		})
 
 		It("should update SleepOrder resource", func() {
