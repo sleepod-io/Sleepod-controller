@@ -19,6 +19,14 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+// ResourceSleepParams defines the sleep configuration for a specific resource or default.
+type ResourceSleepParams struct {
+	Name     string
+	Kind     string
+	SleepAt  string
+	WakeAt   string
+	Timezone string
+}
 // PolicyConfig defines the sleep configuration for a specific resource or default.
 type PolicyConfig struct {
 	// +kubebuilder:validation:Required
@@ -52,6 +60,8 @@ type SleepPolicyStatus struct {
 	// List of resources currently managed by this policy.
 	// +optional
 	ManagedResources []string `json:"managedResources,omitempty"`
+	// +optional
+	State map[string]ResourceSleepParams `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true

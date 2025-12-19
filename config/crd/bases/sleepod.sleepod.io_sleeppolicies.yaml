@@ -94,6 +94,12 @@ spec:
                 items:
                   type: string
                 type: array
+              state:
+                additionalProperties:
+                  description: ResourceSleepParams defines the sleep configuration
+                    for a specific resource or default.
+                  type: object
+                type: object
             type: object
         required:
         - spec

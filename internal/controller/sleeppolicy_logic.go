@@ -10,14 +10,6 @@ import (
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
 )
 
-type resourceSleepParams struct {
-	Name     string
-	Kind     string
-	SleepAt  string
-	WakeAt   string
-	Timezone string
-}
-
 // checkAndBuildValidResource validates the SleepPolicy spec and ensures mandatory defaults and cluster sync.
 // It returns true if the policy was modified and needs to be updated.
 func (r *SleepPolicyReconciler) checkAndBuildValidResource(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy) bool {
@@ -139,8 +131,8 @@ func (r *SleepPolicyReconciler) checkAndBuildValidResource(ctx context.Context, 
 }
 
 // buildTheDesiredState calculates the effective sleep parameters for all managed resources in the namespace.
-func (r *SleepPolicyReconciler) buildTheDesiredState(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy) (map[string]resourceSleepParams, error) {
-	desiredState := make(map[string]resourceSleepParams)
+func (r *SleepPolicyReconciler) buildTheDesiredState(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy) (map[string]sleepodv1alpha1.ResourceSleepParams, error) {
+	desiredState := make(map[string]sleepodv1alpha1.ResourceSleepParams)
 
 	// Process Deployments
 	var deploymentList appsv1.DeploymentList
@@ -167,7 +159,7 @@ func (r *SleepPolicyReconciler) buildTheDesiredState(ctx context.Context, policy
 	return desiredState, nil
 }
 
-func (r *SleepPolicyReconciler) getEffectiveParams(name string, kind string, policyMap map[string]sleepodv1alpha1.PolicyConfig) *resourceSleepParams {
+func (r *SleepPolicyReconciler) getEffectiveParams(name string, kind string, policyMap map[string]sleepodv1alpha1.PolicyConfig) *sleepodv1alpha1.ResourceSleepParams {
 	// 1. Check for specific configuration
 	if config, ok := policyMap[name]; ok {
 		return r.resolveParams(name, kind, config)
@@ -179,7 +171,7 @@ func (r *SleepPolicyReconciler) getEffectiveParams(name string, kind string, pol
 	return nil
 }
 
-func (r *SleepPolicyReconciler) resolveParams(name, kind string, policy sleepodv1alpha1.PolicyConfig) *resourceSleepParams {
+func (r *SleepPolicyReconciler) resolveParams(name, kind string, policy sleepodv1alpha1.PolicyConfig) *sleepodv1alpha1.ResourceSleepParams {
 	if !policy.Enable {
 		return nil
 	}
@@ -199,7 +191,7 @@ func (r *SleepPolicyReconciler) resolveParams(name, kind string, policy sleepodv
 		timezone = r.Config.DefaultTimezone
 	}
 
-	return &resourceSleepParams{
+	return &sleepodv1alpha1.ResourceSleepParams{
 		Name:     name,
 		Kind:     kind,
 		SleepAt:  sleepAt,
