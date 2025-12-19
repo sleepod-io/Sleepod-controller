@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
+	"github.com/shaygef123/SleePod-controller/internal/config"
 	"github.com/shaygef123/SleePod-controller/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
@@ -202,11 +203,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load configuration
+	configuration := config.Load()
+	setupLog.Info("Loaded configuration", "config", configuration)
+
 	if err := (&controller.SleepOrderReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SleepOrder")
+		os.Exit(1)
+	}
+	if err := (&controller.SleepPolicyReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: configuration,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "SleepPolicy")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

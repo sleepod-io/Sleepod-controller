@@ -20,9 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // SleepOrderSpec defines the desired state of SleepOrder
 type SleepOrderSpec struct {
 	// +kubebuilder:validation:Required
@@ -76,7 +73,6 @@ type SleepOrder struct {
 }
 
 // +kubebuilder:object:root=true
-
 // SleepOrderList contains a list of SleepOrder
 type SleepOrderList struct {
 	metav1.TypeMeta `json:",inline"`

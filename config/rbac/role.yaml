@@ -19,6 +19,7 @@ rules:
   - sleepod.sleepod.io
   resources:
   - sleeporders
+  - sleeppolicies
   verbs:
   - create
   - delete
@@ -31,12 +32,14 @@ rules:
   - sleepod.sleepod.io
   resources:
   - sleeporders/finalizers
+  - sleeppolicies/finalizers
   verbs:
   - update
 - apiGroups:
   - sleepod.sleepod.io
   resources:
   - sleeporders/status
+  - sleeppolicies/status
   verbs:
   - get
   - patch

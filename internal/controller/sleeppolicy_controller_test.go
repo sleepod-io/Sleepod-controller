@@ -1,0 +1,688 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package controller
+
+import (
+	"context"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	errors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
+	"github.com/shaygef123/SleePod-controller/internal/config"
+)
+
+var _ = Describe("SleepPolicy Controller", func() {
+
+	// Unit Tests for Logic
+	Context("Logic: checkAndBuildValidResource", func() {
+		var reconciler *SleepPolicyReconciler
+
+		BeforeEach(func() {
+			reconciler = &SleepPolicyReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("should add default deployment config if missing", func() {
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments:  map[string]sleepodv1alpha1.PolicyConfig{},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("default"))
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
+		})
+
+		It("should add default statefulset config if missing", func() {
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.StatefulSets).To(HaveKey("default"))
+			Expect(policy.Spec.StatefulSets["default"].Enable).To(BeTrue())
+		})
+
+		It("should prevent disabling the default config", func() {
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: false},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: false},
+					},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
+			Expect(policy.Spec.StatefulSets["default"].Enable).To(BeTrue())
+		})
+
+		It("should return false if policy is already valid", func() {
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeFalse())
+		})
+
+		It("should add default config if specific config exists but other resources exist in cluster", func() {
+			// Scenario: Policy has specific config for 'app-a', but 'app-b' exists in cluster.
+			// Logic should see 'app-b', realize it needs coverage, and ensure 'default' is present.
+			// SETUP:
+			// 1. Policy with only 'app-a'
+			// 2. Cluster with 'app-a' and 'app-b' (Deployments)
+
+			// Mock Client with existing resources
+			existingDeploymentA := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-a", Namespace: "default"}}
+			existingDeploymentB := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-b", Namespace: "default"}}
+
+			fakeClient := fake.NewClientBuilder().
+				WithObjects(existingDeploymentA, existingDeploymentB).
+				Build()
+
+			reconciler.Client = fakeClient
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-a": {Enable: true},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("default"))
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("app-a"))
+		})
+
+		It("should log error but continue if specified resource does not exist in cluster", func() {
+			// Scenario: Policy specifies 'app-ghost' which does not exist in cluster.
+			// Logic should see mismatch, log error (implied), but continue processing defaults.
+			// Also, should we remove it? User said "log error message but continue".
+			// Assuming 'continue' means we don't crash and we fix defaults.
+
+			// Mock Client with ONE other resource to ensure 'default' is needed
+			existingDeploymentOther := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-other", Namespace: "default"}}
+			fakeClient := fake.NewClientBuilder().
+				WithObjects(existingDeploymentOther).
+				Build()
+			reconciler.Client = fakeClient
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-ghost": {Enable: true},
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{},
+				},
+			}
+
+			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+
+			Expect(changed).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("default"))
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
+			Expect(policy.Spec.Deployments).To(HaveKey("app-ghost"))
+		})
+	})
+
+	Context("Logic: buildTheDesiredState", func() {
+		var reconciler *SleepPolicyReconciler
+
+		BeforeEach(func() {
+			reconciler = &SleepPolicyReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("should apply global defaults when no specific policy exists", func() {
+			// Setup: Cluster has Deployment 'app-default'
+			// Policy: 'default' enabled, no specific config for 'app-default'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-default", Namespace: "default"}}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep).Build()
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+				},
+			}
+
+			// Act
+			desiredMap, err := reconciler.buildTheDesiredState(context.Background(), policy)
+
+			// Assert
+			Expect(err).ToNot(HaveOccurred())
+			Expect(desiredMap).To(HaveKey("app-default"))
+			params := desiredMap["app-default"]
+			Expect(params.WakeAt).To(Equal("08:00"))  // Global Default
+			Expect(params.SleepAt).To(Equal("20:00")) // Global Default
+			Expect(params.Timezone).To(Equal("UTC"))  // Global Default
+		})
+
+		It("should respect specific overrides", func() {
+			// Setup: Cluster has Deployment 'app-special'
+			// Policy: 'app-special' has specific Config
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-special", Namespace: "default"}}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep).Build()
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-special": {
+							Enable:   true,
+							WakeAt:   "10:00",
+							Timezone: "CST", // UTC − 06:00.
+						},
+						"default": {Enable: true},
+					},
+				},
+			}
+
+			// Act
+			desiredMap, err := reconciler.buildTheDesiredState(context.Background(), policy)
+
+			// Assert
+			Expect(err).ToNot(HaveOccurred())
+			Expect(desiredMap).To(HaveKey("app-special"))
+			params := desiredMap["app-special"]
+			Expect(params.WakeAt).To(Equal("10:00"))  // Specific
+			Expect(params.SleepAt).To(Equal("20:00")) // Default (inherited because missing in specific)
+			Expect(params.Timezone).To(Equal("CST"))  // Specific
+		})
+
+		It("should exclude resources that are disabled in policy", func() {
+			// Setup: Cluster has Deployment 'app-disabled'
+			// Policy: 'app-disabled' set to Enable: false
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-disabled", Namespace: "default"}}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep).Build()
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-disabled": {Enable: false},
+						"default":      {Enable: true},
+					},
+				},
+			}
+
+			// Act
+			desiredMap, err := reconciler.buildTheDesiredState(context.Background(), policy)
+
+			// Assert
+			Expect(err).ToNot(HaveOccurred())
+			Expect(desiredMap).ToNot(HaveKey("app-disabled"))
+		})
+	})
+
+	Context("Logic: DeploySleepOrderResource", func() {
+		var reconciler *SleepPolicyReconciler
+		var policy *sleepodv1alpha1.SleepPolicy
+		var resourceDesiredState sleepodv1alpha1.ResourceSleepParams
+
+		BeforeEach(func() {
+			reconciler = &SleepPolicyReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
+				Scheme: scheme.Scheme,
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("should create SleepOrder resource", func() {
+			// Setup: Cluster has Deployment 'app-create'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-create", Namespace: "default"}}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep).Build()
+
+			// Setup: Policy has Deployment 'app-create'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-create": {Enable: true},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-create",
+				Namespace: "default",
+				WakeAt:    "08:00",
+				SleepAt:   "20:00",
+				Timezone:  "UTC",
+			}
+
+			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionCreate)
+
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should update SleepOrder resource", func() {
+			// Setup: Cluster has Deployment 'app-update'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-update", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "app-update",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
+
+			// Setup: Policy has Deployment 'app-update'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-update": {Enable: true, WakeAt: "10:00", SleepAt: "20:00", Timezone: "CST"},
+						"default":    {Enable: true},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-update",
+				Namespace: "default",
+				WakeAt:    "10:00",
+				SleepAt:   "20:00",
+				Timezone:  "CST",
+			}
+
+			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionUpdate)
+
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should not do anything, nothing to change", func() {
+			// Setup: Cluster has Deployment 'app-nochange'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-nochange", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-nochange", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "app-nochange",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
+
+			// Setup: Policy has Deployment 'app-nochange'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-nochange": {Enable: true, WakeAt: "08:00", SleepAt: "20:00", Timezone: "UTC"},
+						"default":      {Enable: true},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-nochange",
+				Namespace: "default",
+				WakeAt:    "08:00",
+				SleepAt:   "20:00",
+				Timezone:  "UTC",
+			}
+
+			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionUpdate)
+
+			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+
+	Context("Logic: needToDeploySleepOrder", func() {
+		var reconciler *SleepPolicyReconciler
+		var policy *sleepodv1alpha1.SleepPolicy
+		var resourceDesiredState sleepodv1alpha1.ResourceSleepParams
+
+		BeforeEach(func() {
+			reconciler = &SleepPolicyReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
+				Scheme: scheme.Scheme,
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("should create", func() {
+			// Setup: Cluster has Deployment 'app-create'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-create", Namespace: "default"}}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep).Build()
+
+			// Setup: Policy has Deployment 'app-create'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-create": {Enable: true},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-create",
+				Namespace: "default",
+				WakeAt:    "08:00",
+				SleepAt:   "20:00",
+				Timezone:  "UTC",
+			}
+
+			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState)
+
+			Expect(needToDeploy).To(BeTrue())
+			Expect(action).To(Equal(actionCreate))
+		})
+
+		It("should update", func() {
+			// Setup: Cluster has StatefulSet 'app-update'
+			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-update", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "StatefulSet",
+						Name: "app-update",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(sts, sleepOrder).Build()
+
+			// Setup: Policy has StatefulSet 'app-update'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-update": {Enable: true, WakeAt: "10:00", SleepAt: "20:00", Timezone: "CST"},
+						"default":    {Enable: true},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-update",
+				Namespace: "default",
+				WakeAt:    "10:00",
+				SleepAt:   "20:00",
+				Timezone:  "CST",
+			}
+
+			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState)
+
+			Expect(needToDeploy).To(BeTrue())
+			Expect(action).To(Equal(actionUpdate))
+		})
+
+		It("should do nothing, nothing to change", func() {
+			// Setup: Cluster has Deployment 'app-nochange'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-nochange", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-nochange", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "app-nochange",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
+
+			// Setup: Policy has Deployment 'app-nochange'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true, WakeAt: "08:00", SleepAt: "20:00", Timezone: "UTC"},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-nochange",
+				Namespace: "default",
+				WakeAt:    "08:00",
+				SleepAt:   "20:00",
+				Timezone:  "UTC",
+			}
+
+			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionUpdate)
+
+			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+
+	Context("Logic: deleteUndesiredResources", func() {
+		var reconciler *SleepPolicyReconciler
+		var policy *sleepodv1alpha1.SleepPolicy
+		var resourceDesiredState map[string]sleepodv1alpha1.ResourceSleepParams
+
+		BeforeEach(func() {
+			reconciler = &SleepPolicyReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
+				Scheme: scheme.Scheme,
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("should delete undesired resources - default enable is false specified", func() {
+			// Setup: Cluster has Deployment 'app-delete'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-delete", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-delete", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "app-delete",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
+
+			// Setup: Policy has Deployment 'app-delete'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: false},
+					},
+				},
+			}
+
+			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, resourceDesiredState)
+			Expect(err).ToNot(HaveOccurred())
+			// verify sleepOrder deleted
+			Expect(reconciler.Client.Get(context.Background(), types.NamespacedName{Name: "default-app-delete", Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).ToNot(Succeed())
+		})
+
+		It("should do nothing, no sleepOrder to delete", func() {
+			// Setup: Cluster has StatefulSet 'app-delete'
+			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "desired-app", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-desired-app", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "StatefulSet",
+						Name: "desired-app",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(sts, sleepOrder).Build()
+
+			// Setup: Policy has StatefulSet 'desired-app'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true, WakeAt: "08:00", SleepAt: "20:00", Timezone: "UTC"},
+					},
+				},
+			}
+			resourceDesiredState = map[string]sleepodv1alpha1.ResourceSleepParams{
+				"desired-app": {
+					Name:      "desired-app",
+					Namespace: "default",
+					WakeAt:    "08:00",
+					SleepAt:   "20:00",
+					Timezone:  "UTC",
+				},
+			}
+
+			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, resourceDesiredState)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(reconciler.Client.Get(context.Background(), types.NamespacedName{Name: "default-desired-app", Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).To(Succeed())
+		})
+	})
+
+	// Scaffolding Integration Tests (Preserved)
+	Context("When reconciling a resource", func() {
+		const resourceName = "test-resource"
+
+		ctx := context.Background()
+
+		typeNamespacedName := types.NamespacedName{
+			Name:      resourceName,
+			Namespace: "default",
+		}
+		sleeppolicy := &sleepodv1alpha1.SleepPolicy{}
+
+		BeforeEach(func() {
+			By("creating the custom resource for the Kind SleepPolicy")
+			err := k8sClient.Get(ctx, typeNamespacedName, sleeppolicy)
+			if err != nil && errors.IsNotFound(err) {
+				resource := &sleepodv1alpha1.SleepPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      resourceName,
+						Namespace: "default",
+					},
+					// TODO(user): Specify other spec details if needed.
+				}
+				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			}
+		})
+
+		AfterEach(func() {
+			// TODO(user): Cleanup logic
+			resource := &sleepodv1alpha1.SleepPolicy{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the specific resource instance SleepPolicy")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should successfully reconcile the resource", func() {
+			By("Reconciling the created resource")
+			controllerReconciler := &SleepPolicyReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				// Inject default config for integration test
+				Config: config.Load(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			// TODO(user): Add more specific assertions depending on your controller logic
+		})
+	})
+})

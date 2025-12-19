@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/sleepod.sleepod.io_sleeporders.yaml
+- bases/sleepod.sleepod.io_sleeppolicies.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
