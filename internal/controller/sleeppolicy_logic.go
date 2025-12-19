@@ -204,10 +204,41 @@ func (r *SleepPolicyReconciler) resolveParams(namespace, name, kind string, poli
 	}
 }
 
-// func (r *SleepPolicyReconciler) needToDeploySleepOrder(resourceDesiredState sleepodv1alpha1.ResourceSleepParams) bool {
-// 	resourceState :=
-// 	return true
-// }
+func (r *SleepPolicyReconciler) deleteUndesiredResources(ctx context.Context, namespace string, desiredState map[string]sleepodv1alpha1.ResourceSleepParams) error {
+	log := logf.FromContext(ctx)
+	var sleepOrderList sleepodv1alpha1.SleepOrderList
+	if err := r.List(ctx, &sleepOrderList, client.InNamespace(namespace)); err != nil {
+		return err
+	}
+	for _, sleepOrder := range sleepOrderList.Items {
+		if _, ok := desiredState[sleepOrder.Spec.TargetRef.Name]; !ok {
+			if err := r.Delete(ctx, &sleepOrder); err != nil {
+				return err
+			}
+			log.Info("Deleted Undesired SleepOrder", "name", sleepOrder.Name)
+		}
+	}
+	return nil
+}
+
+func (r *SleepPolicyReconciler) needToDeploySleepOrder(resourceDesiredState sleepodv1alpha1.ResourceSleepParams, sleepPolicy *sleepodv1alpha1.SleepPolicy) (bool, string) {
+	// check if specific sleeporder exists.
+	var sleepOrder sleepodv1alpha1.SleepOrder
+	err := r.Get(context.Background(), client.ObjectKey{
+		Namespace: resourceDesiredState.Namespace,
+		Name:      resourceDesiredState.Namespace + "-" + resourceDesiredState.Name,
+	}, &sleepOrder)
+	if err == nil {
+		// if yes, check if config hash is the same.
+		if sleepOrder.Annotations[configHashAnnotationKey] != utils.ConfigHashCalc(resourceDesiredState) {
+			return true, actionUpdate
+		}
+	} else {
+		// otherwise, need to create.
+		return true, actionCreate
+	}
+	return false, ""
+}
 
 func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy, resourceDesiredState sleepodv1alpha1.ResourceSleepParams, action string) error {
 	log := logf.FromContext(ctx)
@@ -228,7 +259,7 @@ func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, po
 		},
 	}
 	switch action {
-	case "create":
+	case actionCreate:
 		sleepOrder.Annotations = map[string]string{
 			configHashAnnotationKey: utils.ConfigHashCalc(resourceDesiredState),
 		}
@@ -238,7 +269,7 @@ func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, po
 		if err := r.Create(ctx, sleepOrder); err != nil {
 			return err
 		}
-	case "update":
+	case actionUpdate:
 		// Fetch existing resource to get ResourceVersion
 		current := &sleepodv1alpha1.SleepOrder{}
 		if err := r.Get(ctx, client.ObjectKeyFromObject(sleepOrder), current); err != nil {

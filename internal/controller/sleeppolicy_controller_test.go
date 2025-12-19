@@ -411,10 +411,46 @@ var _ = Describe("SleepPolicy Controller", func() {
 			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionUpdate)
 
 			Expect(err).ToNot(HaveOccurred())
-			// expect the sleeporder to be deleted
-			sleepOrderName := types.NamespacedName{
-				Name:      "default-app-delete",
+		})
+	})
+
+	Context("Logic: needToDeploySleepOrder", func() {
+		var reconciler *SleepPolicyReconciler
+		var policy *sleepodv1alpha1.SleepPolicy
+		var resourceDesiredState sleepodv1alpha1.ResourceSleepParams
+
+		BeforeEach(func() {
+			reconciler = &SleepPolicyReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
+				Scheme: scheme.Scheme,
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("should create", func() {
+			// Setup: Cluster has Deployment 'app-create'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-create", Namespace: "default"}}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep).Build()
+
+			// Setup: Policy has Deployment 'app-create'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-create": {Enable: true},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-create",
 				Namespace: "default",
+				WakeAt:    "08:00",
+				SleepAt:   "20:00",
+				Timezone:  "UTC",
 			}
 
 			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState, policy)
@@ -423,24 +459,28 @@ var _ = Describe("SleepPolicy Controller", func() {
 			Expect(action).To(Equal(actionCreate))
 		})
 
-		It("should update SleepOrder resource", func() {
-			// Setup: Cluster has Deployment 'app-update'
-			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
+		It("should update", func() {
+			// Setup: Cluster has StatefulSet 'app-update'
+			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
 				ObjectMeta: metav1.ObjectMeta{Name: "default-app-update", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "StatefulSet",
+						Name: "app-update",
+					},
 					WakeAt:   "08:00",
 					SleepAt:  "20:00",
 					Timezone: "UTC",
 				},
 			}
-			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(sts, sleepOrder).Build()
 
-			// Setup: Policy has Deployment 'app-update'
+			// Setup: Policy has StatefulSet 'app-update'
 			policy = &sleepodv1alpha1.SleepPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepPolicySpec{
-					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
 						"app-update": {Enable: true, WakeAt: "10:00", SleepAt: "20:00", Timezone: "CST"},
 						"default":    {Enable: true},
 					},
@@ -454,9 +494,141 @@ var _ = Describe("SleepPolicy Controller", func() {
 				Timezone:  "CST",
 			}
 
-			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, "update")
+			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState, policy)
+
+			Expect(needToDeploy).To(BeTrue())
+			Expect(action).To(Equal(actionUpdate))
+		})
+
+		It("should do nothing, nothing to change", func() {
+			// Setup: Cluster has Deployment 'app-nochange'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-nochange", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-nochange", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "app-nochange",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
+
+			// Setup: Policy has Deployment 'app-nochange'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true, WakeAt: "08:00", SleepAt: "20:00", Timezone: "UTC"},
+					},
+				},
+			}
+			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
+				Name:      "app-nochange",
+				Namespace: "default",
+				WakeAt:    "08:00",
+				SleepAt:   "20:00",
+				Timezone:  "UTC",
+			}
+
+			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionUpdate)
 
 			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+
+	Context("Logic: deleteUndesiredResources", func() {
+		var reconciler *SleepPolicyReconciler
+		var policy *sleepodv1alpha1.SleepPolicy
+		var resourceDesiredState map[string]sleepodv1alpha1.ResourceSleepParams
+
+		BeforeEach(func() {
+			reconciler = &SleepPolicyReconciler{
+				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
+				Scheme: scheme.Scheme,
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("should delete undesired resources - default enable is false specified", func() {
+			// Setup: Cluster has Deployment 'app-delete'
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-delete", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-app-delete", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "Deployment",
+						Name: "app-delete",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(dep, sleepOrder).Build()
+
+			// Setup: Policy has Deployment 'app-delete'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: false},
+					},
+				},
+			}
+
+			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, resourceDesiredState)
+			Expect(err).ToNot(HaveOccurred())
+			// verify sleepOrder deleted
+			Expect(reconciler.Client.Get(context.Background(), types.NamespacedName{Name: "default-app-delete", Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).ToNot(Succeed())
+		})
+
+		It("should do nothing, no sleepOrder to delete", func() {
+			// Setup: Cluster has StatefulSet 'app-delete'
+			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "desired-app", Namespace: "default"}}
+			sleepOrder := &sleepodv1alpha1.SleepOrder{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-desired-app", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepOrderSpec{
+					TargetRef: sleepodv1alpha1.TargetRef{
+						Kind: "StatefulSet",
+						Name: "desired-app",
+					},
+					WakeAt:   "08:00",
+					SleepAt:  "20:00",
+					Timezone: "UTC",
+				},
+			}
+			reconciler.Client = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(sts, sleepOrder).Build()
+
+			// Setup: Policy has StatefulSet 'desired-app'
+			policy = &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true, WakeAt: "08:00", SleepAt: "20:00", Timezone: "UTC"},
+					},
+				},
+			}
+			resourceDesiredState = map[string]sleepodv1alpha1.ResourceSleepParams{
+				"desired-app": {
+					Name:      "desired-app",
+					Namespace: "default",
+					WakeAt:    "08:00",
+					SleepAt:   "20:00",
+					Timezone:  "UTC",
+				},
+			}
+
+			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, resourceDesiredState)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(reconciler.Client.Get(context.Background(), types.NamespacedName{Name: "default-desired-app", Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).To(Succeed())
 		})
 	})
 
