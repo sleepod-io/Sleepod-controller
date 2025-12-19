@@ -83,9 +83,9 @@ func TestSnapshotReplicas(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to get updated deployment: %v", err)
 				}
-				val, ok := updatedDeployment.Annotations[annotationKey]
+				val, ok := updatedDeployment.Annotations[originalReplicasAnnotationKey]
 				if !ok {
-					t.Error("annotation " + annotationKey + " not found")
+					t.Error("annotation " + originalReplicasAnnotationKey + " not found")
 				}
 				if val != strconv.Itoa(int(tt.expectReplicas)) {
 					t.Errorf("expected annotation '%d', got '%s'", tt.expectReplicas, val)
@@ -99,9 +99,9 @@ func TestSnapshotReplicas(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to get updated statefulset: %v", err)
 				}
-				val, ok := updatedStatefulSet.Annotations[annotationKey]
+				val, ok := updatedStatefulSet.Annotations[originalReplicasAnnotationKey]
 				if !ok {
-					t.Error("annotation " + annotationKey + " not found")
+					t.Error("annotation " + originalReplicasAnnotationKey + " not found")
 				}
 				if val != strconv.Itoa(int(tt.expectReplicas)) {
 					t.Errorf("expected annotation '%d', got '%s'", tt.expectReplicas, val)
@@ -136,7 +136,7 @@ func TestRestoreReplicas(t *testing.T) {
 					Name:      "test-deployment",
 					Namespace: "default",
 					Annotations: map[string]string{
-						annotationKey: "5",
+						originalReplicasAnnotationKey: "5",
 					},
 				},
 				Spec: appsv1.DeploymentSpec{
@@ -152,7 +152,7 @@ func TestRestoreReplicas(t *testing.T) {
 					Name:      "test-statefulset",
 					Namespace: "default",
 					Annotations: map[string]string{
-						annotationKey: "5",
+						originalReplicasAnnotationKey: "5",
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -193,8 +193,8 @@ func TestRestoreReplicas(t *testing.T) {
 					t.Errorf("expected replicas '%d', got '%d'", tt.expectReplicas, originalReplicas)
 				}
 				// Verify that the annotation was removed
-				if _, ok := updatedDeployment.Annotations[annotationKey]; ok {
-					t.Errorf("annotation '%s' should have been removed", annotationKey)
+				if _, ok := updatedDeployment.Annotations[originalReplicasAnnotationKey]; ok {
+					t.Errorf("annotation '%s' should have been removed", originalReplicasAnnotationKey)
 				}
 			case *appsv1.StatefulSet:
 				updatedStatefulSet := tt.object.(*appsv1.StatefulSet)
@@ -206,8 +206,8 @@ func TestRestoreReplicas(t *testing.T) {
 					t.Errorf("expected replicas '%d', got '%d'", tt.expectReplicas, originalReplicas)
 				}
 				// Verify that the annotation was removed
-				if _, ok := updatedStatefulSet.Annotations[annotationKey]; ok {
-					t.Errorf("annotation '%s' should have been removed", annotationKey)
+				if _, ok := updatedStatefulSet.Annotations[originalReplicasAnnotationKey]; ok {
+					t.Errorf("annotation '%s' should have been removed", originalReplicasAnnotationKey)
 				}
 			default:
 				t.Fatalf("unknown resource type: %T", tt.object)
@@ -504,7 +504,7 @@ func TestReconcile_wakeFlow(t *testing.T) {
 					Name:      "test-deployment-0",
 					Namespace: "default",
 					Annotations: map[string]string{
-						annotationKey: "5",
+						originalReplicasAnnotationKey: "5",
 					},
 				},
 				Spec: appsv1.DeploymentSpec{
@@ -537,7 +537,7 @@ func TestReconcile_wakeFlow(t *testing.T) {
 					Name:      "test-statefulset-0",
 					Namespace: "default",
 					Annotations: map[string]string{
-						annotationKey: "5",
+						originalReplicasAnnotationKey: "5",
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -698,7 +698,7 @@ func TestSleepOrderReconciler_Delete(t *testing.T) {
 					Name:      "test-statefulset-3",
 					Namespace: "default",
 					Annotations: map[string]string{
-						annotationKey: "3",
+						originalReplicasAnnotationKey: "3",
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -773,9 +773,9 @@ func TestSleepOrderReconciler_Delete(t *testing.T) {
 				if *updatedDeployment.Spec.Replicas != tt.expectedReplicas {
 					t.Errorf("expected replicas '%d', got '%d'", tt.expectedReplicas, *updatedDeployment.Spec.Replicas)
 				}
-				_, ok := updatedDeployment.Annotations[annotationKey]
+				_, ok := updatedDeployment.Annotations[originalReplicasAnnotationKey]
 				if ok {
-					t.Errorf("annotation '%s' should have been removed", annotationKey)
+					t.Errorf("annotation '%s' should have been removed", originalReplicasAnnotationKey)
 				}
 			case *appsv1.StatefulSet:
 				updatedStatefulSet := &appsv1.StatefulSet{}
@@ -786,9 +786,9 @@ func TestSleepOrderReconciler_Delete(t *testing.T) {
 				if *updatedStatefulSet.Spec.Replicas != tt.expectedReplicas {
 					t.Errorf("expected replicas '%d', got '%d'", tt.expectedReplicas, *updatedStatefulSet.Spec.Replicas)
 				}
-				_, ok := updatedStatefulSet.Annotations[annotationKey]
+				_, ok := updatedStatefulSet.Annotations[originalReplicasAnnotationKey]
 				if ok {
-					t.Errorf("annotation '%s' should have been removed", annotationKey)
+					t.Errorf("annotation '%s' should have been removed", originalReplicasAnnotationKey)
 				}
 			}
 

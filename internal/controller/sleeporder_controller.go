@@ -41,16 +41,6 @@ type SleepOrderReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-const (
-	annotationKey       string = "sleepod.io/original-replicas"
-	sleepingState       string = "Sleeping"
-	awakeState          string = "Awake"
-	sleepOrderFinalizer string = "sleepod.io/finalizer"
-	defaultTimezone     string = "UTC"
-	kindDeployment      string = "Deployment"
-	kindStatefulSet     string = "StatefulSet"
-)
-
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeporders/finalizers,verbs=update
@@ -72,7 +62,7 @@ func (r *SleepOrderReconciler) snapshotReplicas(ctx context.Context, target clie
 	if annotations == nil {
 		annotations = make(map[string]string)
 	}
-	annotations[annotationKey] = strconv.Itoa(int(replicas))
+	annotations[originalReplicasAnnotationKey] = strconv.Itoa(int(replicas))
 	target.SetAnnotations(annotations)
 	return replicas, r.Update(ctx, target)
 }
@@ -86,9 +76,9 @@ func (r *SleepOrderReconciler) restoreReplicas(ctx context.Context, target clien
 	}
 	annotations := target.GetAnnotations()
 	if annotations == nil {
-		return 0, fmt.Errorf("annotation %s not found", annotationKey)
+		return 0, fmt.Errorf("annotation %s not found", originalReplicasAnnotationKey)
 	}
-	replicas, err := strconv.Atoi(annotations[annotationKey])
+	replicas, err := strconv.Atoi(annotations[originalReplicasAnnotationKey])
 	if err != nil {
 		return 0, err
 	}
@@ -103,7 +93,7 @@ func (r *SleepOrderReconciler) restoreReplicas(ctx context.Context, target clien
 		return 0, fmt.Errorf("unsupported resource type: %T", target)
 	}
 	// Remove annotation
-	delete(target.GetAnnotations(), annotationKey)
+	delete(target.GetAnnotations(), originalReplicasAnnotationKey)
 	target.SetAnnotations(target.GetAnnotations())
 
 	return replicasInt32, r.Update(ctx, target)
@@ -226,7 +216,7 @@ func (r *SleepOrderReconciler) handleSleep(ctx context.Context, sleepOrder *slee
 	log := logf.FromContext(ctx)
 	var originalReplicas int32
 	annotations := targetObj.GetAnnotations()
-	if val, ok := annotations[annotationKey]; ok {
+	if val, ok := annotations[originalReplicasAnnotationKey]; ok {
 		// if annotation exists, use it
 		valInt, err := strconv.Atoi(val)
 		if err != nil {
