@@ -245,7 +245,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 						"app-special": {
 							Enable:   true,
 							WakeAt:   "10:00",
-							Timezone: "CST", //UTC − 06:00.
+							Timezone: "CST", // UTC − 06:00.
 						},
 						"default": {Enable: true},
 					},
@@ -453,7 +453,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				Timezone:  "UTC",
 			}
 
-			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState, policy)
+			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState)
 
 			Expect(needToDeploy).To(BeTrue())
 			Expect(action).To(Equal(actionCreate))
@@ -494,7 +494,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				Timezone:  "CST",
 			}
 
-			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState, policy)
+			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState)
 
 			Expect(needToDeploy).To(BeTrue())
 			Expect(action).To(Equal(actionUpdate))

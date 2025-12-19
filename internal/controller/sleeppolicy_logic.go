@@ -221,7 +221,7 @@ func (r *SleepPolicyReconciler) deleteUndesiredResources(ctx context.Context, na
 	return nil
 }
 
-func (r *SleepPolicyReconciler) needToDeploySleepOrder(resourceDesiredState sleepodv1alpha1.ResourceSleepParams, sleepPolicy *sleepodv1alpha1.SleepPolicy) (bool, string) {
+func (r *SleepPolicyReconciler) needToDeploySleepOrder(resourceDesiredState sleepodv1alpha1.ResourceSleepParams) (bool, string) {
 	// check if specific sleeporder exists.
 	var sleepOrder sleepodv1alpha1.SleepOrder
 	err := r.Get(context.Background(), client.ObjectKey{

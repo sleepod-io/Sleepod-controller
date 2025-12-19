@@ -2,22 +2,22 @@ package controller
 
 // Global consts:
 const (
-	defaultTimezone     string = "UTC"
-	kindDeployment      string = "Deployment"
-	kindStatefulSet     string = "StatefulSet"
+	defaultTimezone string = "UTC"
+	kindDeployment  string = "Deployment"
+	kindStatefulSet string = "StatefulSet"
 )
 
 // SleepOrder Annotations:
 const (
-	configHashAnnotationKey string = "sleepod.io/configHash"
+	configHashAnnotationKey       string = "sleepod.io/configHash"
 	originalReplicasAnnotationKey string = "sleepod.io/original-replicas"
-	sleepOrderFinalizer string = "sleepod.io/finalizer"
+	sleepOrderFinalizer           string = "sleepod.io/finalizer"
 )
 
 // SleepOrder Status:
 const (
-	sleepingState       string = "Sleeping"
-	awakeState          string = "Awake"
+	sleepingState string = "Sleeping"
+	awakeState    string = "Awake"
 )
 
 // sleepPolicy actions:

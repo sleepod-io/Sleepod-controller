@@ -19,15 +19,17 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
 // ResourceSleepParams defines the sleep configuration for a specific resource or default.
 type ResourceSleepParams struct {
-	Name     string
-	Namespace string
-	Kind     string
-	SleepAt  string
-	WakeAt   string
-	Timezone string
+	Name      string `json:"name,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	SleepAt   string `json:"sleepAt,omitempty"`
+	WakeAt    string `json:"wakeAt,omitempty"`
+	Timezone  string `json:"timezone,omitempty"`
 }
+
 // PolicyConfig defines the sleep configuration for a specific resource or default.
 type PolicyConfig struct {
 	// +kubebuilder:validation:Required

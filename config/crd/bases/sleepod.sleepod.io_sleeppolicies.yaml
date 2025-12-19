@@ -98,6 +98,19 @@ spec:
                 additionalProperties:
                   description: ResourceSleepParams defines the sleep configuration
                     for a specific resource or default.
+                  properties:
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                    sleepAt:
+                      type: string
+                    timezone:
+                      type: string
+                    wakeAt:
+                      type: string
                   type: object
                 type: object
             type: object
