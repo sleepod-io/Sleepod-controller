@@ -18,10 +18,13 @@ package controller
 
 import (
 	"context"
+	"reflect"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
@@ -39,20 +42,78 @@ type SleepPolicyReconciler struct {
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeppolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeppolicies/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the SleepPolicy object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *SleepPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	sleepPolicyObj, err := FetchSleepPolicyOrContinue(ctx, r.Client, req)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if sleepPolicyObj == nil {
+		return ctrl.Result{}, nil
+	}
+	resourceNeedToBeUpdate, err := r.checkAndBuildValidResource(ctx, sleepPolicyObj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if resourceNeedToBeUpdate {
+		if err := r.Update(ctx, sleepPolicyObj); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+	log.Info("SleepPolicy is valid")
 
+	if sleepPolicyObj.DeletionTimestamp != nil {
+		// TODO: remove the policy from the namespace (validate that the sleepOrders resources are deleted)
+		log.Info("SleepPolicy %s is being deleted", sleepPolicyObj.Name)
+		controllerutil.RemoveFinalizer(sleepPolicyObj, sleepPolicyFinalizer)
+		if err := r.Update(ctx, sleepPolicyObj); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// check if the finalizer is present
+	if !controllerutil.ContainsFinalizer(sleepPolicyObj, sleepPolicyFinalizer) {
+		controllerutil.AddFinalizer(sleepPolicyObj, sleepPolicyFinalizer)
+		if err := r.Update(ctx, sleepPolicyObj); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// build the desired state.
+	desiredState, err := r.buildTheDesiredState(ctx, sleepPolicyObj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	err = r.deleteUndesiredResources(ctx, req.Namespace, desiredState)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// apply the desired state.
+	for _, params := range desiredState {
+		needToDeploySleepOrder, action, err := r.needToDeploySleepOrder(ctx, sleepPolicyObj.Name, params)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if needToDeploySleepOrder {
+			err := r.DeploySleepOrderResource(ctx, sleepPolicyObj, params, action)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	// update the status of the SleepPolicy resource if needed.
+	if !reflect.DeepEqual(sleepPolicyObj.Status.State, desiredState) {
+		sleepPolicyObj.Status.State = desiredState
+		if err := r.Status().Update(ctx, sleepPolicyObj); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -62,4 +123,16 @@ func (r *SleepPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&sleepodv1alpha1.SleepPolicy{}).
 		Named("sleeppolicy").
 		Complete(r)
+}
+
+func FetchSleepPolicyOrContinue(ctx context.Context, r client.Client, req ctrl.Request) (*sleepodv1alpha1.SleepPolicy, error) {
+	SleepPolicyObj := &sleepodv1alpha1.SleepPolicy{}
+	err := r.Get(ctx, req.NamespacedName, SleepPolicyObj)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return SleepPolicyObj, nil
 }
