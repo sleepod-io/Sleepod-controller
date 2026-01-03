@@ -62,8 +62,6 @@ type SleepPolicySpec struct {
 type SleepPolicyStatus struct {
 	// List of resources currently managed by this policy.
 	// +optional
-	ManagedResources []string `json:"managedResources,omitempty"`
-	// +optional
 	State map[string]ResourceSleepParams `json:"state,omitempty"`
 }
 
