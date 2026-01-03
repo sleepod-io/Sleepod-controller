@@ -24,6 +24,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -112,7 +113,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("SleepOrder fetched", "SleepOrder", SleepOrderObj)
+	log.V(1).Info("SleepOrder fetched", "SleepOrder", SleepOrderObj)
 
 	sleepOrderSpec := SleepOrderObj.Spec
 	targetObj, err := r.getTargetObject(ctx, req.Namespace, sleepOrderSpec.TargetRef)
@@ -136,6 +137,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	log.Info("Calculated time state", "shouldSleep", shouldSleep, "nextEvent", nextEvent)
 
 	currentReplicas, err := getReplicas(targetObj)
 	if err != nil {
@@ -175,41 +177,59 @@ func (r *SleepOrderReconciler) getTargetObject(ctx context.Context, namespace st
 }
 
 func (r *SleepOrderReconciler) handleFinalizer(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, targetObj client.Object, currentReplicas int32) (bool, error) {
-	if sleepOrder.DeletionTimestamp.IsZero() {
-		// The object is not being deleted.
-		if !controllerutil.ContainsFinalizer(sleepOrder, sleepOrderFinalizer) {
-			controllerutil.AddFinalizer(sleepOrder, sleepOrderFinalizer)
+	var shouldStop bool
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the latest version of SleepOrder to avoid conflicts
+		if err := r.Get(ctx, client.ObjectKeyFromObject(sleepOrder), sleepOrder); err != nil {
+			if errors.IsNotFound(err) {
+				shouldStop = true
+				return nil
+			}
+			return err
+		}
+
+		if sleepOrder.DeletionTimestamp.IsZero() {
+			// The object is not being deleted.
+			if !controllerutil.ContainsFinalizer(sleepOrder, sleepOrderFinalizer) {
+				controllerutil.AddFinalizer(sleepOrder, sleepOrderFinalizer)
+				if err := r.Update(ctx, sleepOrder); err != nil {
+					return client.IgnoreNotFound(err)
+				}
+				// Continue to logic as original behavior
+				shouldStop = false
+				return nil
+			}
+			shouldStop = false
+			return nil
+		}
+
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(sleepOrder, sleepOrderFinalizer) {
+			if currentReplicas == 0 {
+				replicasFromAnnotation, err := r.restoreReplicas(ctx, targetObj)
+				if err != nil {
+					return err
+				}
+				err = setReplicas(targetObj, replicasFromAnnotation)
+				if err != nil {
+					return err
+				}
+				err = r.Update(ctx, targetObj)
+				if err != nil {
+					return client.IgnoreNotFound(err)
+				}
+			}
+
+			// remove finalizer and update it.
+			controllerutil.RemoveFinalizer(sleepOrder, sleepOrderFinalizer)
 			if err := r.Update(ctx, sleepOrder); err != nil {
-				return true, err
+				return client.IgnoreNotFound(err)
 			}
 		}
-		return false, nil
-	}
-
-	// The object is being deleted
-	if controllerutil.ContainsFinalizer(sleepOrder, sleepOrderFinalizer) {
-		if currentReplicas == 0 {
-			replicasFromAnnotation, err := r.restoreReplicas(ctx, targetObj)
-			if err != nil {
-				return true, err
-			}
-			err = setReplicas(targetObj, replicasFromAnnotation)
-			if err != nil {
-				return true, err
-			}
-			err = r.Update(ctx, targetObj)
-			if err != nil {
-				return true, err
-			}
-		}
-
-		// remove finalizer and update it.
-		controllerutil.RemoveFinalizer(sleepOrder, sleepOrderFinalizer)
-		if err := r.Update(ctx, sleepOrder); err != nil {
-			return true, err
-		}
-	}
-	return true, nil
+		shouldStop = true
+		return nil
+	})
+	return shouldStop, err
 }
 
 func (r *SleepOrderReconciler) handleSleep(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, targetObj client.Object, nextEvent time.Time) (ctrl.Result, error) {
@@ -249,10 +269,12 @@ func (r *SleepOrderReconciler) handleSleep(ctx context.Context, sleepOrder *slee
 
 func (r *SleepOrderReconciler) handleWake(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, targetObj client.Object, currentReplicas int32, nextEvent time.Time) (ctrl.Result, error) {
 	if currentReplicas == 0 {
+		log := logf.FromContext(ctx)
 		restoredReplicas, err := r.restoreReplicas(ctx, targetObj)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		log.Info("reconcile wake: scaling up", "target", targetObj.GetName(), "restoredReplicas", restoredReplicas)
 		err = setReplicas(targetObj, restoredReplicas)
 		if err != nil {
 			return ctrl.Result{}, err

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -220,7 +221,9 @@ func (r *SleepPolicyReconciler) deleteUndesiredResources(ctx context.Context, na
 		key := fmt.Sprintf("%s/%s", sleepOrder.Spec.TargetRef.Kind, sleepOrder.Spec.TargetRef.Name)
 		if _, ok := desiredState[key]; !ok {
 			if err := r.Delete(ctx, &sleepOrder); err != nil {
-				return err
+				if client.IgnoreNotFound(err) != nil {
+					return err
+				}
 			}
 			log.Info("Deleted Undesired SleepOrder", "name", sleepOrder.Name)
 		}
@@ -232,7 +235,8 @@ func (r *SleepPolicyReconciler) needToDeploySleepOrder(ctx context.Context, poli
 	// check if specific sleeporder exists.
 	var sleepOrder sleepodv1alpha1.SleepOrder
 	// Name format: PolicyName-Kind-ResourceName
-	expectedName := fmt.Sprintf("%s-%s-%s", policyName, resourceDesiredState.Kind, resourceDesiredState.Name)
+	// Name format: PolicyName-Kind-ResourceName
+	expectedName := fmt.Sprintf("%s-%s-%s", policyName, strings.ToLower(resourceDesiredState.Kind), resourceDesiredState.Name)
 	err := r.Get(ctx, client.ObjectKey{
 		Namespace: resourceDesiredState.Namespace,
 		Name:      expectedName,
@@ -255,7 +259,8 @@ func (r *SleepPolicyReconciler) needToDeploySleepOrder(ctx context.Context, poli
 func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy, resourceDesiredState sleepodv1alpha1.ResourceSleepParams, action string) error {
 	log := logf.FromContext(ctx)
 	// Name format: PolicyName-Kind-ResourceName
-	sleepOrderName := fmt.Sprintf("%s-%s-%s", policy.Name, resourceDesiredState.Kind, resourceDesiredState.Name)
+	// Name format: PolicyName-Kind-ResourceName
+	sleepOrderName := fmt.Sprintf("%s-%s-%s", policy.Name, strings.ToLower(resourceDesiredState.Kind), resourceDesiredState.Name)
 	sleepOrder := &sleepodv1alpha1.SleepOrder{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        sleepOrderName,
@@ -283,6 +288,7 @@ func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, po
 		if err := r.Create(ctx, sleepOrder); err != nil {
 			return err
 		}
+		log.Info("Created SleepOrder", "name", sleepOrderName)
 	case actionUpdate:
 		// Fetch existing resource to get ResourceVersion
 		current := &sleepodv1alpha1.SleepOrder{}
@@ -303,6 +309,7 @@ func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, po
 		if err := r.Update(ctx, sleepOrder); err != nil {
 			return err
 		}
+		log.Info("Updated SleepOrder", "name", sleepOrderName)
 	default:
 		return nil
 	}

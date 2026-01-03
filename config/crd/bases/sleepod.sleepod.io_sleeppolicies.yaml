@@ -89,11 +89,6 @@ spec:
           status:
             description: status defines the observed state of SleepPolicy
             properties:
-              managedResources:
-                description: List of resources currently managed by this policy.
-                items:
-                  type: string
-                type: array
               state:
                 additionalProperties:
                   description: ResourceSleepParams defines the sleep configuration
@@ -112,6 +107,7 @@ spec:
                     wakeAt:
                       type: string
                   type: object
+                description: List of resources currently managed by this policy.
                 type: object
             type: object
         required:
