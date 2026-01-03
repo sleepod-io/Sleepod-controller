@@ -112,7 +112,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("SleepOrder fetched", "SleepOrder", SleepOrderObj)
+	log.V(1).Info("SleepOrder fetched", "SleepOrder", SleepOrderObj)
 
 	sleepOrderSpec := SleepOrderObj.Spec
 	targetObj, err := r.getTargetObject(ctx, req.Namespace, sleepOrderSpec.TargetRef)
@@ -136,6 +136,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	log.Info("Calculated time state", "shouldSleep", shouldSleep, "nextEvent", nextEvent)
 
 	currentReplicas, err := getReplicas(targetObj)
 	if err != nil {
@@ -249,10 +250,12 @@ func (r *SleepOrderReconciler) handleSleep(ctx context.Context, sleepOrder *slee
 
 func (r *SleepOrderReconciler) handleWake(ctx context.Context, sleepOrder *sleepodv1alpha1.SleepOrder, targetObj client.Object, currentReplicas int32, nextEvent time.Time) (ctrl.Result, error) {
 	if currentReplicas == 0 {
+		log := logf.FromContext(ctx)
 		restoredReplicas, err := r.restoreReplicas(ctx, targetObj)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		log.Info("reconcile wake: scaling up", "target", targetObj.GetName(), "restoredReplicas", restoredReplicas)
 		err = setReplicas(targetObj, restoredReplicas)
 		if err != nil {
 			return ctrl.Result{}, err

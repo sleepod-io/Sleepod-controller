@@ -66,7 +66,7 @@ func (r *SleepPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if sleepPolicyObj.DeletionTimestamp != nil {
 		// TODO: remove the policy from the namespace (validate that the sleepOrders resources are deleted)
-		log.Info("SleepPolicy %s is being deleted", sleepPolicyObj.Name)
+		log.Info("SleepPolicy is being deleted", "name", sleepPolicyObj.Name)
 		controllerutil.RemoveFinalizer(sleepPolicyObj, sleepPolicyFinalizer)
 		if err := r.Update(ctx, sleepPolicyObj); err != nil {
 			return ctrl.Result{}, err
