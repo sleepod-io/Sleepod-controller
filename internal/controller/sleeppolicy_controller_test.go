@@ -695,11 +695,11 @@ var _ = Describe("SleepPolicy Controller", func() {
 			for i := 0; i < 5; i++ {
 				result, err = reconciler.Reconcile(ctx, req)
 				Expect(err).ToNot(HaveOccurred())
-				if !result.Requeue {
+				if result == (ctrl.Result{}) {
 					break
 				}
 			}
-			Expect(result.Requeue).To(BeFalse())
+			Expect(result).To(Equal(ctrl.Result{}))
 
 			// 3. Assert SleepOrder Created
 			expectedName := "main-policy-Deployment-app-happy"
@@ -746,11 +746,11 @@ var _ = Describe("SleepPolicy Controller", func() {
 			for i := 0; i < 5; i++ {
 				result, err = reconciler.Reconcile(ctx, req)
 				Expect(err).ToNot(HaveOccurred())
-				if !result.Requeue {
+				if result == (ctrl.Result{}) {
 					break
 				}
 			}
-			Expect(result.Requeue).To(BeFalse())
+			Expect(result).To(Equal(ctrl.Result{}))
 
 			// 3. Assert BOTH SleepOrders Created
 			// Deployment SleepOrder
@@ -788,7 +788,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			for i := 0; i < 5; i++ {
 				result, err = reconciler.Reconcile(ctx, req)
 				Expect(err).ToNot(HaveOccurred())
-				if !result.Requeue {
+				if result == (ctrl.Result{}) {
 					break
 				}
 			}
