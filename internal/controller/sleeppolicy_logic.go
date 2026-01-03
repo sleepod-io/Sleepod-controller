@@ -2,8 +2,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -15,7 +17,7 @@ import (
 
 // checkAndBuildValidResource validates the SleepPolicy spec and ensures mandatory defaults and cluster sync.
 // It returns true if the policy was modified and needs to be updated.
-func (r *SleepPolicyReconciler) checkAndBuildValidResource(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy) bool {
+func (r *SleepPolicyReconciler) checkAndBuildValidResource(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy) (bool, error) {
 	changed := false
 	log := logf.FromContext(ctx)
 
@@ -47,6 +49,7 @@ func (r *SleepPolicyReconciler) checkAndBuildValidResource(ctx context.Context, 
 		}
 	} else {
 		log.Error(err, "Failed to list Deployments for validation")
+		return false, err
 	}
 
 	var stsList appsv1.StatefulSetList
@@ -66,6 +69,7 @@ func (r *SleepPolicyReconciler) checkAndBuildValidResource(ctx context.Context, 
 		}
 	} else {
 		log.Error(err, "Failed to list StatefulSets for validation")
+		return false, err
 	}
 
 	// Always ensure 'default' exists.
@@ -130,7 +134,7 @@ func (r *SleepPolicyReconciler) checkAndBuildValidResource(ctx context.Context, 
 		}
 	}
 
-	return changed
+	return changed, nil
 }
 
 // buildTheDesiredState calculates the effective sleep parameters for all managed resources in the namespace.
@@ -143,8 +147,9 @@ func (r *SleepPolicyReconciler) buildTheDesiredState(ctx context.Context, policy
 		return nil, err
 	}
 	for _, dep := range deploymentList.Items {
-		if params := r.getEffectiveParams(policy.Namespace, dep.Name, "Deployment", policy.Spec.Deployments); params != nil {
-			desiredState[dep.Name] = *params
+		if params := r.getEffectiveParams(policy.Namespace, dep.Name, kindDeployment, policy.Spec.Deployments); params != nil {
+			key := fmt.Sprintf("%s/%s", params.Kind, params.Name)
+			desiredState[key] = *params
 		}
 	}
 
@@ -154,8 +159,9 @@ func (r *SleepPolicyReconciler) buildTheDesiredState(ctx context.Context, policy
 		return nil, err
 	}
 	for _, sts := range stsList.Items {
-		if params := r.getEffectiveParams(policy.Namespace, sts.Name, "StatefulSet", policy.Spec.StatefulSets); params != nil {
-			desiredState[sts.Name] = *params
+		if params := r.getEffectiveParams(policy.Namespace, sts.Name, kindStatefulSet, policy.Spec.StatefulSets); params != nil {
+			key := fmt.Sprintf("%s/%s", params.Kind, params.Name)
+			desiredState[key] = *params
 		}
 	}
 
@@ -211,7 +217,8 @@ func (r *SleepPolicyReconciler) deleteUndesiredResources(ctx context.Context, na
 		return err
 	}
 	for _, sleepOrder := range sleepOrderList.Items {
-		if _, ok := desiredState[sleepOrder.Spec.TargetRef.Name]; !ok {
+		key := fmt.Sprintf("%s/%s", sleepOrder.Spec.TargetRef.Kind, sleepOrder.Spec.TargetRef.Name)
+		if _, ok := desiredState[key]; !ok {
 			if err := r.Delete(ctx, &sleepOrder); err != nil {
 				return err
 			}
@@ -221,30 +228,37 @@ func (r *SleepPolicyReconciler) deleteUndesiredResources(ctx context.Context, na
 	return nil
 }
 
-func (r *SleepPolicyReconciler) needToDeploySleepOrder(resourceDesiredState sleepodv1alpha1.ResourceSleepParams) (bool, string) {
+func (r *SleepPolicyReconciler) needToDeploySleepOrder(ctx context.Context, policyName string, resourceDesiredState sleepodv1alpha1.ResourceSleepParams) (bool, string, error) {
 	// check if specific sleeporder exists.
 	var sleepOrder sleepodv1alpha1.SleepOrder
-	err := r.Get(context.Background(), client.ObjectKey{
+	// Name format: PolicyName-Kind-ResourceName
+	expectedName := fmt.Sprintf("%s-%s-%s", policyName, resourceDesiredState.Kind, resourceDesiredState.Name)
+	err := r.Get(ctx, client.ObjectKey{
 		Namespace: resourceDesiredState.Namespace,
-		Name:      resourceDesiredState.Namespace + "-" + resourceDesiredState.Name,
+		Name:      expectedName,
 	}, &sleepOrder)
 	if err == nil {
-		// if yes, check if config hash is the same.
+		// if sleeporder exists, check if config hash is the same.
 		if sleepOrder.Annotations[configHashAnnotationKey] != utils.ConfigHashCalc(resourceDesiredState) {
-			return true, actionUpdate
+			return true, actionUpdate, nil
 		}
 	} else {
-		// otherwise, need to create.
-		return true, actionCreate
+		if errors.IsNotFound(err) {
+			// otherwise, need to create.
+			return true, actionCreate, nil
+		}
+		return false, "", err
 	}
-	return false, ""
+	return false, "", nil
 }
 
 func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy, resourceDesiredState sleepodv1alpha1.ResourceSleepParams, action string) error {
 	log := logf.FromContext(ctx)
+	// Name format: PolicyName-Kind-ResourceName
+	sleepOrderName := fmt.Sprintf("%s-%s-%s", policy.Name, resourceDesiredState.Kind, resourceDesiredState.Name)
 	sleepOrder := &sleepodv1alpha1.SleepOrder{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        resourceDesiredState.Namespace + "-" + resourceDesiredState.Name,
+			Name:        sleepOrderName,
 			Namespace:   resourceDesiredState.Namespace,
 			Annotations: make(map[string]string),
 		},

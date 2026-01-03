@@ -22,11 +22,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
-	errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
@@ -59,7 +59,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 
-			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			changed, err := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
 
 			Expect(changed).To(BeTrue())
 			Expect(policy.Spec.Deployments).To(HaveKey("default"))
@@ -77,7 +78,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 
-			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			changed, err := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
 
 			Expect(changed).To(BeTrue())
 			Expect(policy.Spec.StatefulSets).To(HaveKey("default"))
@@ -97,7 +99,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 
-			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			changed, err := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
 
 			Expect(changed).To(BeTrue())
 			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
@@ -117,7 +120,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 
-			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			changed, err := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
 
 			Expect(changed).To(BeFalse())
 		})
@@ -151,7 +155,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 
-			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			changed, err := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
 
 			Expect(changed).To(BeTrue())
 			Expect(policy.Spec.Deployments).To(HaveKey("default"))
@@ -182,7 +187,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 
-			changed := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			changed, err := reconciler.checkAndBuildValidResource(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
 
 			Expect(changed).To(BeTrue())
 			Expect(policy.Spec.Deployments).To(HaveKey("default"))
@@ -225,8 +231,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 
 			// Assert
 			Expect(err).ToNot(HaveOccurred())
-			Expect(desiredMap).To(HaveKey("app-default"))
-			params := desiredMap["app-default"]
+			Expect(desiredMap).To(HaveKey("Deployment/app-default"))
+			params := desiredMap["Deployment/app-default"]
 			Expect(params.WakeAt).To(Equal("08:00"))  // Global Default
 			Expect(params.SleepAt).To(Equal("20:00")) // Global Default
 			Expect(params.Timezone).To(Equal("UTC"))  // Global Default
@@ -257,8 +263,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 
 			// Assert
 			Expect(err).ToNot(HaveOccurred())
-			Expect(desiredMap).To(HaveKey("app-special"))
-			params := desiredMap["app-special"]
+			Expect(desiredMap).To(HaveKey("Deployment/app-special"))
+			params := desiredMap["Deployment/app-special"]
 			Expect(params.WakeAt).To(Equal("10:00"))  // Specific
 			Expect(params.SleepAt).To(Equal("20:00")) // Default (inherited because missing in specific)
 			Expect(params.Timezone).To(Equal("CST"))  // Specific
@@ -285,7 +291,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 
 			// Assert
 			Expect(err).ToNot(HaveOccurred())
-			Expect(desiredMap).ToNot(HaveKey("app-disabled"))
+			Expect(desiredMap).ToNot(HaveKey("Deployment/app-disabled"))
 		})
 	})
 
@@ -323,6 +329,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
 				Name:      "app-create",
 				Namespace: "default",
+				Kind:      "Deployment",
 				WakeAt:    "08:00",
 				SleepAt:   "20:00",
 				Timezone:  "UTC",
@@ -337,7 +344,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has Deployment 'app-update'
 			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "default-app-update", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-Deployment-app-update", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "Deployment",
@@ -363,6 +370,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
 				Name:      "app-update",
 				Namespace: "default",
+				Kind:      "Deployment",
 				WakeAt:    "10:00",
 				SleepAt:   "20:00",
 				Timezone:  "CST",
@@ -377,7 +385,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has Deployment 'app-nochange'
 			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-nochange", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "default-app-nochange", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-Deployment-app-nochange", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "Deployment",
@@ -403,6 +411,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
 				Name:      "app-nochange",
 				Namespace: "default",
+				Kind:      "Deployment",
 				WakeAt:    "08:00",
 				SleepAt:   "20:00",
 				Timezone:  "UTC",
@@ -448,12 +457,14 @@ var _ = Describe("SleepPolicy Controller", func() {
 			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
 				Name:      "app-create",
 				Namespace: "default",
+				Kind:      "Deployment",
 				WakeAt:    "08:00",
 				SleepAt:   "20:00",
 				Timezone:  "UTC",
 			}
 
-			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState)
+			needToDeploy, action, err := reconciler.needToDeploySleepOrder(context.Background(), "main-policy", resourceDesiredState)
+			Expect(err).ToNot(HaveOccurred())
 
 			Expect(needToDeploy).To(BeTrue())
 			Expect(action).To(Equal(actionCreate))
@@ -463,7 +474,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has StatefulSet 'app-update'
 			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "default-app-update", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-StatefulSet-app-update", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "StatefulSet",
@@ -489,12 +500,14 @@ var _ = Describe("SleepPolicy Controller", func() {
 			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
 				Name:      "app-update",
 				Namespace: "default",
+				Kind:      "StatefulSet",
 				WakeAt:    "10:00",
 				SleepAt:   "20:00",
 				Timezone:  "CST",
 			}
 
-			needToDeploy, action := reconciler.needToDeploySleepOrder(resourceDesiredState)
+			needToDeploy, action, err := reconciler.needToDeploySleepOrder(context.Background(), "policy", resourceDesiredState)
+			Expect(err).ToNot(HaveOccurred())
 
 			Expect(needToDeploy).To(BeTrue())
 			Expect(action).To(Equal(actionUpdate))
@@ -504,7 +517,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has Deployment 'app-nochange'
 			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-nochange", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "default-app-nochange", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-Deployment-app-nochange", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "Deployment",
@@ -529,6 +542,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			resourceDesiredState = sleepodv1alpha1.ResourceSleepParams{
 				Name:      "app-nochange",
 				Namespace: "default",
+				Kind:      "Deployment",
 				WakeAt:    "08:00",
 				SleepAt:   "20:00",
 				Timezone:  "UTC",
@@ -617,7 +631,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 			resourceDesiredState = map[string]sleepodv1alpha1.ResourceSleepParams{
-				"desired-app": {
+				"StatefulSet/desired-app": {
 					Name:      "desired-app",
 					Namespace: "default",
 					WakeAt:    "08:00",
@@ -632,57 +646,166 @@ var _ = Describe("SleepPolicy Controller", func() {
 		})
 	})
 
-	// Scaffolding Integration Tests (Preserved)
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
-
+	// Integration Tests
+	Context("Integration: Reconciliation Logic", func() {
 		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default",
-		}
-		sleeppolicy := &sleepodv1alpha1.SleepPolicy{}
+		var reconciler *SleepPolicyReconciler
+		var fakeClient client.Client
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind SleepPolicy")
-			err := k8sClient.Get(ctx, typeNamespacedName, sleeppolicy)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &sleepodv1alpha1.SleepPolicy{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+			s := scheme.Scheme
+			_ = sleepodv1alpha1.AddToScheme(s)
+			fakeClient = fake.NewClientBuilder().
+				WithScheme(s).
+				WithStatusSubresource(&sleepodv1alpha1.SleepPolicy{}).
+				Build()
+			reconciler = &SleepPolicyReconciler{
+				Client: fakeClient,
+				Scheme: s,
+				Config: &config.Config{
+					DefaultWakeAt:   "08:00",
+					DefaultSleepAt:  "20:00",
+					DefaultTimezone: "UTC",
+				},
+			}
+		})
+
+		It("Happy Path: Should create SleepOrder for managed Deployment", func() {
+			// 1. Setup Cluster State
+			dep := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "app-happy", Namespace: "default"},
+			}
+			Expect(fakeClient.Create(ctx, dep)).To(Succeed())
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "main-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"app-happy": {Enable: true, WakeAt: "09:00", SleepAt: "18:00"},
 					},
-					// TODO(user): Specify other spec details if needed.
+				},
+			}
+			Expect(fakeClient.Create(ctx, policy)).To(Succeed())
+
+			// 2. Run Reconcile
+			// 2. Run Reconcile (Loop to handle Requeue)
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "main-policy", Namespace: "default"}}
+			var result ctrl.Result
+			var err error
+			for i := 0; i < 5; i++ {
+				result, err = reconciler.Reconcile(ctx, req)
+				Expect(err).ToNot(HaveOccurred())
+				if result == (ctrl.Result{}) {
+					break
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// 3. Assert SleepOrder Created
+			expectedName := "main-policy-Deployment-app-happy"
+			sleepOrder := &sleepodv1alpha1.SleepOrder{}
+			err = reconciler.Get(ctx, types.NamespacedName{Name: expectedName, Namespace: "default"}, sleepOrder)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Verify Specs
+			Expect(sleepOrder.Spec.WakeAt).To(Equal("09:00"))
+			Expect(sleepOrder.Spec.SleepAt).To(Equal("18:00"))
+			Expect(sleepOrder.Spec.TargetRef.Kind).To(Equal("Deployment"))
+			Expect(sleepOrder.Spec.TargetRef.Name).To(Equal("app-happy"))
+
+			// Verify OwnerReference
+			Expect(sleepOrder.OwnerReferences).To(HaveLen(1))
+			Expect(sleepOrder.OwnerReferences[0].Name).To(Equal("main-policy"))
 		})
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic
-			resource := &sleepodv1alpha1.SleepPolicy{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+		It("Resource Name Collision: Should handle Deployment and StatefulSet with same name", func() {
+			// 1. Setup Cluster State: 'web' Deployment AND 'web' StatefulSet
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
+			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
+			Expect(reconciler.Client.Create(ctx, dep)).To(Succeed())
+			Expect(reconciler.Client.Create(ctx, sts)).To(Succeed())
 
-			By("Cleanup the specific resource instance SleepPolicy")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "main-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true}, // Use default config for both
+					},
+					StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+				},
+			}
+			Expect(fakeClient.Create(ctx, policy)).To(Succeed())
+
+			// 2. Run Reconcile
+			// 2. Run Reconcile (Loop)
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "main-policy", Namespace: "default"}}
+			var result ctrl.Result
+			var err error
+			for i := 0; i < 5; i++ {
+				result, err = reconciler.Reconcile(ctx, req)
+				Expect(err).ToNot(HaveOccurred())
+				if result == (ctrl.Result{}) {
+					break
+				}
+			}
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// 3. Assert BOTH SleepOrders Created
+			// Deployment SleepOrder
+			depSO := &sleepodv1alpha1.SleepOrder{}
+			err = reconciler.Get(ctx, types.NamespacedName{Name: "main-policy-Deployment-web", Namespace: "default"}, depSO)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(depSO.Spec.TargetRef.Kind).To(Equal("Deployment"))
+
+			// StatefulSet SleepOrder
+			stsSO := &sleepodv1alpha1.SleepOrder{}
+			err = reconciler.Get(ctx, types.NamespacedName{Name: "main-policy-StatefulSet-web", Namespace: "default"}, stsSO)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(stsSO.Spec.TargetRef.Kind).To(Equal("StatefulSet"))
 		})
 
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &SleepPolicyReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-				// Inject default config for integration test
-				Config: config.Load(),
+		It("Garbage Collection: Should delete SleepOrder when resource is removed", func() {
+			// 1. Setup: Orphan Deployment exists, gets SleepOrder first
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-orphan", Namespace: "default"}}
+			Expect(fakeClient.Create(ctx, dep)).To(Succeed())
+
+			policy := &sleepodv1alpha1.SleepPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "main-policy", Namespace: "default"},
+				Spec: sleepodv1alpha1.SleepPolicySpec{
+					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
+						"default": {Enable: true},
+					},
+				},
+			}
+			Expect(fakeClient.Create(ctx, policy)).To(Succeed())
+
+			// Initial Reconcile -> Create SleepOrder
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "main-policy", Namespace: "default"}}
+			var result ctrl.Result
+			var err error
+			for i := 0; i < 5; i++ {
+				result, err = reconciler.Reconcile(ctx, req)
+				Expect(err).ToNot(HaveOccurred())
+				if result == (ctrl.Result{}) {
+					break
+				}
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller logic
+			// Verify SleepOrder Exists
+			soName := "main-policy-Deployment-app-orphan"
+			Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: soName, Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).To(Succeed())
+
+			// 2. Action: Delete Deployment
+			Expect(reconciler.Client.Delete(ctx, dep)).To(Succeed())
+
+			// 3. Reconcile Again
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).ToNot(HaveOccurred())
+
+			// 4. Assert SleepOrder Deleted
+			Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: soName, Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).ToNot(Succeed())
 		})
 	})
 })

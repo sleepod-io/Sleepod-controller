@@ -11,7 +11,7 @@ const (
 const (
 	configHashAnnotationKey       string = "sleepod.io/configHash"
 	originalReplicasAnnotationKey string = "sleepod.io/original-replicas"
-	sleepOrderFinalizer           string = "sleepod.io/finalizer"
+	sleepOrderFinalizer           string = "sleepod.io/sleep-order-finalizer"
 )
 
 // SleepOrder Status:
@@ -24,4 +24,9 @@ const (
 const (
 	actionCreate string = "create"
 	actionUpdate string = "update"
+)
+
+// sleepPolicy Annotations:
+const (
+	sleepPolicyFinalizer string = "sleepod.io/sleep-policy-finalizer"
 )
