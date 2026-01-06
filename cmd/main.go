@@ -222,6 +222,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "SleepPolicy")
 		os.Exit(1)
 	}
+
+	if err := (&controller.NamespaceReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: configuration,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Namespace")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

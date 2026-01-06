@@ -2,7 +2,9 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -12,15 +14,17 @@ type Config struct {
 	DefaultTimezone string
 
 	// Namespace controller configuration
-	// Namespaces to ignore (e.g. kube-system)
-	ExcludedNamespaces []string
+	NamespaceDelaySeconds int
+	ExcludedNamespaces    []string
 }
 
 // Default configuration constants
+// TODO: export consts to file.
 const (
-	DefaultWakeAt   = "08:00"
-	DefaultSleepAt  = "20:00"
-	DefaultTimezone = "UTC"
+	DefaultWakeAt                = "08:00"
+	DefaultSleepAt               = "20:00"
+	DefaultTimezone              = "UTC"
+	DefaultNamespaceDelaySeconds = 20
 )
 
 var DefaultExcludedNamespaces = []string{
@@ -33,10 +37,11 @@ var DefaultExcludedNamespaces = []string{
 // Load loads configuration from environment variables
 func Load() *Config {
 	config := &Config{
-		DefaultWakeAt:      getEnvOrDefault("SLEEPOD_DEFAULT_WAKE_AT", DefaultWakeAt),
-		DefaultSleepAt:     getEnvOrDefault("SLEEPOD_DEFAULT_SLEEP_AT", DefaultSleepAt),
-		DefaultTimezone:    getEnvOrDefault("SLEEPOD_DEFAULT_TIMEZONE", DefaultTimezone),
-		ExcludedNamespaces: getEnvStringSliceOrDefault("SLEEPOD_EXCLUDED_NAMESPACES", DefaultExcludedNamespaces),
+		DefaultWakeAt:         getEnvStrOrDefault("SLEEPOD_DEFAULT_WAKE_AT", DefaultWakeAt),
+		DefaultSleepAt:        getEnvStrOrDefault("SLEEPOD_DEFAULT_SLEEP_AT", DefaultSleepAt),
+		DefaultTimezone:       getEnvStrOrDefault("SLEEPOD_DEFAULT_TIMEZONE", DefaultTimezone),
+		ExcludedNamespaces:    getEnvStringSliceOrDefault("SLEEPOD_EXCLUDED_NAMESPACES", DefaultExcludedNamespaces),
+		NamespaceDelaySeconds: getEnvIntOrDefault("SLEEPOD_NAMESPACE_DELAY_SECONDS", DefaultNamespaceDelaySeconds),
 	}
 
 	return config
@@ -52,10 +57,25 @@ func (c *Config) IsNamespaceExcluded(namespace string) bool {
 	return false
 }
 
-// Helper functions for environment variable parsing
-func getEnvOrDefault(key, defaultValue string) string {
+// GetNamespaceDelay returns the delay as a time.Duration
+func (c *Config) GetNamespaceDelay() time.Duration {
+	return time.Duration(c.NamespaceDelaySeconds) * time.Second
+}
+
+// Helper functions for str environment variable parsing
+func getEnvStrOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+// Helper functions for int environment variable parsing
+func getEnvIntOrDefault(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
 	}
 	return defaultValue
 }
