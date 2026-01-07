@@ -43,6 +43,10 @@ func Load() *Config {
 		ExcludedNamespaces:    getEnvStringSliceOrDefault("SLEEPOD_EXCLUDED_NAMESPACES", DefaultExcludedNamespaces),
 		NamespaceDelaySeconds: getEnvIntOrDefault("SLEEPOD_NAMESPACE_DELAY_SECONDS", DefaultNamespaceDelaySeconds),
 	}
+	namespace := os.Getenv("SLEEPOD_NAMESPACE")
+	if namespace != "" {
+		config.ExcludedNamespaces = append(config.ExcludedNamespaces, namespace)
+	}
 
 	return config
 }

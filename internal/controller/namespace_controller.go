@@ -22,8 +22,9 @@ type NamespaceReconciler struct {
 	Config *config.Config
 }
 
-// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeppolicies,verbs=get;list;watch;create
+
 func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	log.Info("Reconciling Namespace", "name", req.Name)
@@ -50,7 +51,7 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// check if namespace is in excluded list
 	if r.Config.IsNamespaceExcluded(namespace.Name) {
-		log.V(1).Info("Namespace is in excluded list, nothing to reconcile")
+		log.Info("Namespace is in excluded list, skipping reconciliation", "namespace", namespace.Name)
 		return ctrl.Result{}, nil
 	}
 
