@@ -235,8 +235,7 @@ func (r *SleepPolicyReconciler) needToDeploySleepOrder(ctx context.Context, poli
 	// check if specific sleeporder exists.
 	var sleepOrder sleepodv1alpha1.SleepOrder
 	// Name format: PolicyName-Kind-ResourceName
-	// Name format: PolicyName-Kind-ResourceName
-	expectedName := fmt.Sprintf("%s-%s-%s", policyName, strings.ToLower(resourceDesiredState.Kind), resourceDesiredState.Name)
+	expectedName := getSleepOrderName(policyName, resourceDesiredState.Kind, resourceDesiredState.Name)
 	err := r.Get(ctx, client.ObjectKey{
 		Namespace: resourceDesiredState.Namespace,
 		Name:      expectedName,
@@ -259,8 +258,7 @@ func (r *SleepPolicyReconciler) needToDeploySleepOrder(ctx context.Context, poli
 func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, policy *sleepodv1alpha1.SleepPolicy, resourceDesiredState sleepodv1alpha1.ResourceSleepParams, action string) error {
 	log := logf.FromContext(ctx)
 	// Name format: PolicyName-Kind-ResourceName
-	// Name format: PolicyName-Kind-ResourceName
-	sleepOrderName := fmt.Sprintf("%s-%s-%s", policy.Name, strings.ToLower(resourceDesiredState.Kind), resourceDesiredState.Name)
+	sleepOrderName := getSleepOrderName(policy.Name, resourceDesiredState.Kind, resourceDesiredState.Name)
 	sleepOrder := &sleepodv1alpha1.SleepOrder{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        sleepOrderName,
@@ -314,4 +312,14 @@ func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, po
 		return nil
 	}
 	return nil
+}
+
+func getSleepOrderName(policyName, resourceKind, resourceName string) string {
+	kind := strings.ToLower(resourceKind)
+	if kind == strings.ToLower(kindDeployment) {
+		kind = "dep"
+	} else if kind == strings.ToLower(kindStatefulSet) {
+		kind = "sts"
+	}
+	return fmt.Sprintf("%s-%s-%s", policyName, kind, resourceName)
 }

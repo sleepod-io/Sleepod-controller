@@ -344,7 +344,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has Deployment 'app-update'
 			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "policy-deployment-app-update", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-dep-app-update", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "Deployment",
@@ -385,7 +385,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has Deployment 'app-nochange'
 			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-nochange", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "policy-deployment-app-nochange", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-dep-app-nochange", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "Deployment",
@@ -474,7 +474,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has StatefulSet 'app-update'
 			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "app-update", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "policy-statefulset-app-update", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-sts-app-update", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "StatefulSet",
@@ -517,7 +517,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has Deployment 'app-nochange'
 			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app-nochange", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "policy-deployment-app-nochange", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-dep-app-nochange", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "Deployment",
@@ -702,7 +702,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			Expect(result).To(Equal(ctrl.Result{}))
 
 			// 3. Assert SleepOrder Created
-			expectedName := "main-policy-deployment-app-happy"
+			expectedName := "main-policy-dep-app-happy"
 			sleepOrder := &sleepodv1alpha1.SleepOrder{}
 			err = reconciler.Get(ctx, types.NamespacedName{Name: expectedName, Namespace: "default"}, sleepOrder)
 			Expect(err).ToNot(HaveOccurred())
@@ -755,13 +755,13 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// 3. Assert BOTH SleepOrders Created
 			// Deployment SleepOrder
 			depSO := &sleepodv1alpha1.SleepOrder{}
-			err = reconciler.Get(ctx, types.NamespacedName{Name: "main-policy-deployment-web", Namespace: "default"}, depSO)
+			err = reconciler.Get(ctx, types.NamespacedName{Name: "main-policy-dep-web", Namespace: "default"}, depSO)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(depSO.Spec.TargetRef.Kind).To(Equal("Deployment"))
 
 			// StatefulSet SleepOrder
 			stsSO := &sleepodv1alpha1.SleepOrder{}
-			err = reconciler.Get(ctx, types.NamespacedName{Name: "main-policy-statefulset-web", Namespace: "default"}, stsSO)
+			err = reconciler.Get(ctx, types.NamespacedName{Name: "main-policy-sts-web", Namespace: "default"}, stsSO)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(stsSO.Spec.TargetRef.Kind).To(Equal("StatefulSet"))
 		})
@@ -794,7 +794,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			}
 
 			// Verify SleepOrder Exists
-			soName := "main-policy-deployment-app-orphan"
+			soName := "main-policy-dep-app-orphan"
 			Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: soName, Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).To(Succeed())
 
 			// 2. Action: Delete Deployment
