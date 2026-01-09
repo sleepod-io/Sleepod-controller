@@ -2,9 +2,10 @@ package controller
 
 // Global consts:
 const (
-	defaultTimezone string = "UTC"
-	kindDeployment  string = "Deployment"
-	kindStatefulSet string = "StatefulSet"
+	defaultTimezone        string = "UTC"
+	kindDeployment         string = "Deployment"
+	kindStatefulSet        string = "StatefulSet"
+	DefaultSleepPolicyName string = "default-sleeppolicy"
 )
 
 // SleepOrder Annotations:

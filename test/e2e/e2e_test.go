@@ -78,8 +78,24 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
 		_, _ = utils.Run(cmd)
 
+		By("cleaning up SleepPolicy resources")
+		cmd = exec.Command("kubectl", "delete", "sleeppolicy", "--all", "-A")
+		_, _ = utils.Run(cmd)
+
+		By("waiting for all SleepPolicy resources to be deleted")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "sleeppolicy", "-A")
+			output, err := utils.Run(cmd)
+			// Either error (No resources found) or empty output (header only?)
+			// utils.Run might return error if no resources found (exit status 1)
+			if err != nil {
+				return
+			}
+			g.Expect(output).To(ContainSubstring("No resources found"), "SleepPolicies still exist")
+		}, 5*time.Minute, time.Second).Should(Succeed())
+
 		By("cleaning up SleepOrder resources")
-		cmd = exec.Command("kubectl", "delete", "sleeporder", "--all", "-n", namespace)
+		cmd = exec.Command("kubectl", "delete", "sleeporder", "--all", "-A")
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
@@ -336,6 +352,130 @@ spec:
 `, stsName, namespace, stsName, stsName, stsName)
 
 				verifySleepWakeLifecycle("StatefulSet", stsName, stsYaml, "statefulset")
+			})
+		})
+
+		Context("SleepPolicy Controller", func() {
+			It("should create SleepOrder and handle lifecycle for Deployment via Policy", func() {
+				By("creating a deployment")
+				deploymentName := "policy-deployment"
+				deploymentYaml := fmt.Sprintf(`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    app: %s
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: %s
+  template:
+    metadata:
+      labels:
+        app: %s
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: nginx
+        image: nginx
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+`, deploymentName, namespace, deploymentName, deploymentName, deploymentName)
+
+				tmpTargetFile, err := os.CreateTemp("", "policy-target-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = os.Remove(tmpTargetFile.Name()) }()
+				_, err = tmpTargetFile.WriteString(deploymentYaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpTargetFile.Close()).NotTo(HaveOccurred())
+
+				cmd := exec.Command("kubectl", "apply", "-f", tmpTargetFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create Deployment for Policy test")
+
+				By("creating a SleepPolicy")
+				policyName := "e2e-policy"
+				// Set sleep window: SleepAt 1 hour ago, WakeAt 1 hour from now -> Should be ASLEEP
+				wakeAt := time.Now().UTC().Add(time.Hour).Format("15:04")
+				sleepAt := time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+
+				policyYaml := fmt.Sprintf(`
+apiVersion: sleepod.sleepod.io/v1alpha1
+kind: SleepPolicy
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  timezone: "UTC"
+  deployments:
+    %s:
+      enable: true
+      wakeAt: "%s"
+      sleepAt: "%s"
+`, policyName, namespace, deploymentName, wakeAt, sleepAt)
+
+				tmpPolicyFile, err := os.CreateTemp("", "policy-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = os.Remove(tmpPolicyFile.Name()) }()
+				_, err = tmpPolicyFile.WriteString(policyYaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpPolicyFile.Close()).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "apply", "-f", tmpPolicyFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create SleepPolicy")
+
+				// Expected SleepOrder Name: policyName-dep-resourceName
+				expectedSleepOrderName := fmt.Sprintf("%s-dep-%s", policyName, deploymentName)
+
+				By("verifying SleepOrder is created")
+				verifySleepOrderCreated := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeporder", expectedSleepOrderName, "-n", namespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "SleepOrder should be created by Policy")
+				}
+				Eventually(verifySleepOrderCreated, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("verifying Deployment is scaled down (Sleep)")
+				verifyScaledDown := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace,
+						"-o", "jsonpath={.spec.replicas}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("0"), "Deployment should be scaled down to 0")
+				}
+				Eventually(verifyScaledDown, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("updating SleepPolicy for wake window")
+				// Set wake window: WakeAt 1 hour ago, SleepAt 1 hour from now -> Should be AWAKE
+				wakeAt = time.Now().UTC().Add(-1 * time.Hour).Format("15:04")
+				sleepAt = time.Now().UTC().Add(time.Hour).Format("15:04")
+				time.Sleep(5 * time.Second) // Small buffer
+
+				cmd = exec.Command("kubectl", "patch", "sleeppolicy", policyName, "-n", namespace, "--type=merge", "-p",
+					fmt.Sprintf(`{"spec":{"deployments":{"%s":{"wakeAt":"%s","sleepAt":"%s"}}}}`, deploymentName, wakeAt, sleepAt))
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to update SleepPolicy")
+
+				By("verifying Deployment is scaled up (Wake)")
+				verifyScaledUp := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace,
+						"-o", "jsonpath={.spec.replicas}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("3"), "Deployment should be scaled up to 3")
+				}
+				Eventually(verifyScaledUp, 2*time.Minute, time.Second).Should(Succeed())
 			})
 		})
 	})
