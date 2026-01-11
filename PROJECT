@@ -6,6 +6,8 @@ cliVersion: 4.7.1
 domain: sleepod.io
 layout:
 - go.kubebuilder.io/v4
+plugins:
+  helm.kubebuilder.io/v1-alpha: {}
 projectName: sleepod-controller
 repo: github.com/shaygef123/SleePod-controller
 resources:

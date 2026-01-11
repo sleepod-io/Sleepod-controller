@@ -1,0 +1,8 @@
+apiVersion: v2
+name: sleepod-controller
+description: A Helm chart to distribute the project sleepod-controller
+type: application
+version: 0.0.1
+appVersion: "0.0.1"
+# TODO: generate and add icon
+icon: "https://example.com/icon.png"
