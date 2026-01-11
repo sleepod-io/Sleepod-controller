@@ -677,24 +677,28 @@ var _ = Describe("Helm Deployment", Ordered, func() {
 		chartPackagePath = absPath
 
 		By("installing the helm chart")
-		// Split projectImage into repo and tag
-		// projectImage is "shaygef123/sleepod-controller:e2e-test"
-		// defined in e2e_suite_test.go
-		// We need to parse it cleanly.
-		// Assuming Standard format "repo:tag"
-		// But since projectImage variable is available in package scope...
-		// Wait, strings package needs import.
-
 		imageParts := strings.Split(projectImage, ":")
 		Expect(imageParts).To(HaveLen(2), "Invalid projectImage format")
 		repo := imageParts[0]
 		tag := imageParts[1]
 
-		cmd = exec.Command("helm", "upgrade", "--install", "sleepod-controller", chartPackagePath,
+		By("creating a custom values.yaml")
+		customValues := fmt.Sprintf(`
+defaultNamespace: %s
+controllerManager:
+  container:
+    image:
+      repository: %s
+      tag: %s
+`, helmNamespace, repo, tag)
+		customValuesPath := filepath.Join(filepath.Dir(chartPackagePath), "custom_values_e2e.yaml")
+		err = os.WriteFile(customValuesPath, []byte(customValues), 0644)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create custom values file")
+
+		cmd = exec.Command("helm", "install", "sleepod-controller", chartPackagePath,
 			"--namespace", helmNamespace,
 			"--create-namespace",
-			"--set", fmt.Sprintf("controllerManager.container.image.repository=%s", repo),
-			"--set", fmt.Sprintf("controllerManager.container.image.tag=%s", tag),
+			"--values", customValuesPath,
 		)
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install helm chart")
