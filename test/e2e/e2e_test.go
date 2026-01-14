@@ -367,6 +367,19 @@ spec:
 		})
 
 		Context("SleepPolicy Controller", func() {
+			policyTestNamespace := "e2e-policy-test"
+
+			BeforeEach(func() {
+				cmd := exec.Command("kubectl", "create", "ns", policyTestNamespace)
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			AfterEach(func() {
+				cmd := exec.Command("kubectl", "delete", "ns", policyTestNamespace)
+				_, _ = utils.Run(cmd)
+			})
+
 			It("should create SleepOrder and handle lifecycle for Deployment via Policy", func() {
 				By("creating a deployment")
 				deploymentName := "policy-deployment"
@@ -401,7 +414,7 @@ spec:
           capabilities:
             drop:
             - ALL
-`, deploymentName, namespace, deploymentName, deploymentName, deploymentName)
+`, deploymentName, policyTestNamespace, deploymentName, deploymentName, deploymentName)
 
 				tmpTargetFile, err := os.CreateTemp("", "policy-target-*.yaml")
 				Expect(err).NotTo(HaveOccurred())
@@ -433,7 +446,7 @@ spec:
       enable: true
       wakeAt: "%s"
       sleepAt: "%s"
-`, policyName, namespace, deploymentName, wakeAt, sleepAt)
+`, policyName, policyTestNamespace, deploymentName, wakeAt, sleepAt)
 
 				tmpPolicyFile, err := os.CreateTemp("", "policy-*.yaml")
 				Expect(err).NotTo(HaveOccurred())
@@ -451,7 +464,7 @@ spec:
 
 				By("verifying SleepOrder is created")
 				verifySleepOrderCreated := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "sleeporder", expectedSleepOrderName, "-n", namespace)
+					cmd := exec.Command("kubectl", "get", "sleeporder", expectedSleepOrderName, "-n", policyTestNamespace)
 					_, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred(), "SleepOrder should be created by Policy")
 				}
@@ -459,7 +472,7 @@ spec:
 
 				By("verifying Deployment is scaled down (Sleep)")
 				verifyScaledDown := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace,
+					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", policyTestNamespace,
 						"-o", "jsonpath={.spec.replicas}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
@@ -473,7 +486,7 @@ spec:
 				sleepAt = time.Now().UTC().Add(time.Hour).Format("15:04")
 				time.Sleep(5 * time.Second) // Small buffer
 
-				cmd = exec.Command("kubectl", "patch", "sleeppolicy", policyName, "-n", namespace, "--type=merge", "-p",
+				cmd = exec.Command("kubectl", "patch", "sleeppolicy", policyName, "-n", policyTestNamespace, "--type=merge", "-p",
 					fmt.Sprintf(`{"spec":{"deployments":{"%s":{"wakeAt":"%s","sleepAt":"%s"}}}}`, deploymentName, wakeAt, sleepAt))
 				_, err = utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred(), "Failed to update SleepPolicy")
