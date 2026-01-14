@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= sleepod-controller:latest
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -166,9 +166,24 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
+
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) --wait=false -f -
+
+##@ Helm
+
+.PHONY: helm-package
+helm-package: ## Package the helm chart
+	helm package dist/chart -d dist
+
+.PHONY: helm-install
+helm-install: helm-package ## Install the helm chart
+	helm upgrade --install sleepod-controller dist/sleepod-controller-*.tgz
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the helm chart
+	helm uninstall sleepod-controller
 
 ##@ Dependencies
 

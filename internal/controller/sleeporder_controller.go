@@ -79,9 +79,15 @@ func (r *SleepOrderReconciler) restoreReplicas(ctx context.Context, target clien
 	if annotations == nil {
 		return 0, fmt.Errorf("annotation %s not found", originalReplicasAnnotationKey)
 	}
-	replicas, err := strconv.Atoi(annotations[originalReplicasAnnotationKey])
+	val, ok := annotations[originalReplicasAnnotationKey]
+	if !ok || val == "" {
+		// If annotation matches the key but is empty, or doesn't exist, we return 0 to avoid parsing error
+		// and allow the process to continue (e.g. for finalizer removal).
+		return 0, nil
+	}
+	replicas, err := strconv.Atoi(val)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to parse annotation %s: %w", originalReplicasAnnotationKey, err)
 	}
 	replicasInt32 := int32(replicas)
 	// Update replicas
