@@ -10,16 +10,16 @@ When a scheduled time is reached, the controller creates internal `SleepOrder` r
 
 ```mermaid
 graph TD
-    User[User] -->|Creates| Policy[SleepPolicy CR]
-    Policy -->|Watches| Controller[SleePod Controller]
-    Controller -->|Calculates Schedule| Timer{Time Check}
-    Timer -->|Sleep Time| SleepCtx[Create SleepOrder (Sleep)]
-    Timer -->|Wake Time| WakeCtx[Create SleepOrder (Wake)]
-    SleepCtx -->|Scale Down| Resources[Deployments/StatefulSets]
+    User["User"] -->|Creates| Policy["SleepPolicy CR"]
+    Policy -->|Watches| Controller["SleePod Controller"]
+    Controller -->|Calculates Schedule| Timer{"Time Check"}
+    Timer -->|Sleep Time| SleepCtx["Create SleepOrder (Sleep)"]
+    Timer -->|Wake Time| WakeCtx["Create SleepOrder (Wake)"]
+    SleepCtx -->|Scale Down| Resources["Deployments/StatefulSets"]
     WakeCtx -->|Scale Up| Resources
 ```
 
-> **Note**: Users only need to define `SleepPolicy`. The `SleepOrder` resources are created and managed automatically by the controller. You do not need to create them manually.
+> **Note**: Users only need to define `SleepPolicy`. The `SleepOrder` resources are created and managed automatically by the controller. You do not need to create them manually. Both `SleepPolicy` and `SleepOrder` are **namespace-scoped**, meaning a policy only affects resources within the same namespace.
 
 ## Features
 
@@ -45,12 +45,12 @@ graph TD
 
 2. Install the Helm chart:
    ```bash
-   helm install sleepod-controller sleepod/sleepod-controller -n sleepod-system --create-namespace
+   helm install sleepod-controller sleepod/sleepod-controller -n sleepod-controller-system --create-namespace
    ```
 
 3. Verify the installation:
    ```bash
-   kubectl get pods -n sleepod-system
+   kubectl get pods -n sleepod-controller-system
    ```
 
 ## Usage
