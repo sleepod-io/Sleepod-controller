@@ -11,12 +11,18 @@ When a scheduled time is reached, the controller creates internal `SleepOrder` r
 ```mermaid
 graph TD
     User["User"] -->|Creates| Policy["SleepPolicy CR"]
-    Policy -->|Watches| Controller["SleePod Controller"]
-    Controller -->|Calculates Schedule| Timer{"Time Check"}
-    Timer -->|Sleep Time| SleepCtx["Create SleepOrder (Sleep)"]
-    Timer -->|Wake Time| WakeCtx["Create SleepOrder (Wake)"]
-    SleepCtx -->|Scale Down| Resources["Deployments/StatefulSets"]
-    WakeCtx -->|Scale Up| Resources
+    Policy -->|Triggers Creation| Orders["SleepOrder CRs (per Resource)"]
+    Orders -->|Reconciled by| Controller["SleePod Controller"]
+    Controller -->|Calculates State| State{"Current Time?"}
+    
+    State -->|Sleep Window| SleepAction["Scale Down (Sleep)"]
+    State -->|Wake Window| WakeAction["Scale Up (Wake)"]
+    
+    SleepAction -->|Schedules| NextWake["Trigger: Next Wake Time"]
+    WakeAction -->|Schedules| NextSleep["Trigger: Next Sleep Time"]
+    
+    NextWake -.->|Re-queues| Controller
+    NextSleep -.->|Re-queues| Controller
 ```
 
 > **Note**: Users only need to define `SleepPolicy`. The `SleepOrder` resources are created and managed automatically by the controller. You do not need to create them manually. Both `SleepPolicy` and `SleepOrder` are **namespace-scoped**, meaning a policy only affects resources within the same namespace.
