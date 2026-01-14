@@ -6,9 +6,9 @@ controllerManager:
   replicas: 1
   container:
     image:
-    # TODO: change to ghcr.io/<ORG>/sleepod-controller
-      repository: ghcr.io/<ORG>/sleepod-controller
-      tag: 0.0.1
+    # TODO: change to ghcr.io/shaygef123/sleepod-controller
+      repository: ghcr.io/shaygef123/sleepod-controller
+      tag: latest
     args:
       - "--leader-elect"
       - "--metrics-bind-address=:8443"
