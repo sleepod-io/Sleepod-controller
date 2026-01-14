@@ -117,6 +117,10 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("make", "uninstall")
 		_, _ = utils.Run(cmd)
 
+		By("removing regular clusterrolebinding")
+		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found=true")
+		_, _ = utils.Run(cmd)
+
 		By("removing manager namespace")
 		cmd = exec.Command("kubectl", "delete", "ns", namespace)
 		_, _ = utils.Run(cmd)
@@ -317,7 +321,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx
+        image: nginxinc/nginx-unprivileged:latest
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -354,7 +358,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx
+        image: nginxinc/nginx-unprivileged:latest
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -408,7 +412,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx
+        image: nginxinc/nginx-unprivileged:latest
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -493,7 +497,7 @@ spec:
 
 				By("verifying Deployment is scaled up (Wake)")
 				verifyScaledUp := func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace,
+					cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", policyTestNamespace,
 						"-o", "jsonpath={.spec.replicas}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
@@ -668,6 +672,16 @@ var _ = Describe("Helm Deployment", Ordered, func() {
 	var chartPackagePath string
 
 	BeforeAll(func() {
+		By("ensuring helm namespace is deleted")
+		_, _ = utils.Run(exec.Command("kubectl", "delete", "ns", helmNamespace, "--ignore-not-found=true"))
+
+		By("waiting for helm namespace to be gone")
+		Eventually(func(g Gomega) {
+			_, err := utils.Run(exec.Command("kubectl", "get", "ns", helmNamespace))
+			// We expect an error (NotFound)
+			g.Expect(err).To(HaveOccurred())
+		}, 2*time.Minute, time.Second).Should(Succeed())
+
 		By("packaging the helm chart")
 		cmd := exec.Command("make", "helm-package")
 		_, err := utils.Run(cmd)
@@ -697,23 +711,22 @@ var _ = Describe("Helm Deployment", Ordered, func() {
 
 		By("creating a custom values.yaml")
 		customValues := fmt.Sprintf(`
-defaultNamespace: %s
+defaultNamespace: ""
 controllerManager:
   container:
     image:
       repository: %s
       tag: %s
-`, helmNamespace, repo, tag)
+`, repo, tag)
 		customValuesPath := filepath.Join(filepath.Dir(chartPackagePath), "custom_values_e2e.yaml")
 		err = os.WriteFile(customValuesPath, []byte(customValues), 0644)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create custom values file")
 
-		cmd = exec.Command("helm", "install", "sleepod-controller", chartPackagePath,
+		cmd = exec.Command("helm", "upgrade", "--install", "sleepod-controller", chartPackagePath,
 			"--namespace", helmNamespace,
 			"--create-namespace",
 			"--values", customValuesPath,
 		)
-		_, _ = utils.Run(exec.Command("kubectl", "get", "namespaces"))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install helm chart")
 	})
