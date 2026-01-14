@@ -713,6 +713,7 @@ controllerManager:
 			"--create-namespace",
 			"--values", customValuesPath,
 		)
+		_, _ = utils.Run(exec.Command("kubectl", "get", "namespaces"))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install helm chart")
 	})
