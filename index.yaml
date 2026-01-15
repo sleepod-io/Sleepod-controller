@@ -1,0 +1,15 @@
+apiVersion: v1
+entries:
+  sleepod-controller:
+  - apiVersion: v2
+    appVersion: 0.0.1
+    created: "2026-01-15T16:26:13.373734436Z"
+    description: A Helm chart to distribute the project sleepod-controller
+    digest: 6dd5af9a4d61d18f6d1bc78ec9c98433ffb81f4919556627c71cae7c4840bc31
+    icon: https://raw.githubusercontent.com/sleepod-io/Sleepod-controller/main/assets/logo.png
+    name: sleepod-controller
+    type: application
+    urls:
+    - https://github.com/sleepod-io/Sleepod-controller/releases/download/sleepod-controller-0.0.1/sleepod-controller-0.0.1.tgz
+    version: 0.0.1
+generated: "2026-01-15T16:26:13.373744365Z"
