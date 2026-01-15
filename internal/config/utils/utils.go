@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
+	sleepodv1alpha1 "github.com/sleepod-io/sleepod-controller/api/v1alpha1"
 )
 
 func hashCalc(input string) string {

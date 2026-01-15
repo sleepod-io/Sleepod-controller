@@ -30,8 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
-	"github.com/shaygef123/SleePod-controller/internal/logic"
+	sleepodv1alpha1 "github.com/sleepod-io/sleepod-controller/api/v1alpha1"
+	"github.com/sleepod-io/sleepod-controller/internal/logic"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

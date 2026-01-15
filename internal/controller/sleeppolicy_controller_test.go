@@ -29,8 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
-	"github.com/shaygef123/SleePod-controller/internal/config"
+	sleepodv1alpha1 "github.com/sleepod-io/sleepod-controller/api/v1alpha1"
+	"github.com/sleepod-io/sleepod-controller/internal/config"
 )
 
 var _ = Describe("SleepPolicy Controller", func() {

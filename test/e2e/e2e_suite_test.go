@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/shaygef123/SleePod-controller/test/utils"
+	"github.com/sleepod-io/sleepod-controller/test/utils"
 )
 
 var (
@@ -39,7 +39,7 @@ var (
 
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
-	projectImage = "shaygef123/sleepod-controller:e2e-test"
+	projectImage = "ghcr.io/sleepod-io/sleepod-controller:e2e-test"
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,

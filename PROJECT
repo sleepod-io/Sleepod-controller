@@ -9,7 +9,7 @@ layout:
 plugins:
   helm.kubebuilder.io/v1-alpha: {}
 projectName: sleepod-controller
-repo: github.com/shaygef123/SleePod-controller
+repo: github.com/sleepod-io/sleepod-controller
 resources:
 - api:
     crdVersion: v1
@@ -18,7 +18,7 @@ resources:
   domain: sleepod.io
   group: sleepod
   kind: SleepOrder
-  path: github.com/shaygef123/SleePod-controller/api/v1alpha1
+  path: github.com/sleepod-io/sleepod-controller/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -27,6 +27,6 @@ resources:
   domain: sleepod.io
   group: sleepod
   kind: SleepPolicy
-  path: github.com/shaygef123/SleePod-controller/api/v1alpha1
+  path: github.com/sleepod-io/sleepod-controller/api/v1alpha1
   version: v1alpha1
 version: "3"

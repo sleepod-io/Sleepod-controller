@@ -28,7 +28,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/shaygef123/SleePod-controller/test/utils"
+	"github.com/sleepod-io/sleepod-controller/test/utils"
 )
 
 // namespace where the project is deployed in

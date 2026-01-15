@@ -27,8 +27,8 @@ import (
 	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
-	"github.com/shaygef123/SleePod-controller/internal/config"
+	sleepodv1alpha1 "github.com/sleepod-io/sleepod-controller/api/v1alpha1"
+	"github.com/sleepod-io/sleepod-controller/internal/config"
 )
 
 // SleepPolicyReconciler reconciles a SleepPolicy object
