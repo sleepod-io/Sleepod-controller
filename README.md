@@ -1,4 +1,4 @@
-# SleePod-controller
+# SleePod-controller <img src="assets/logo.png" align="right" width="120" />
 
 SleePod-controller is a Kubernetes controller designed to manage the sleep and wake cycles of your Kubernetes workloads. It allows you to define policies for when your deployments and statefulsets should be scaled down (sleep) and scaled up (wake), helping you save resources and costs in non-production environments.
 
