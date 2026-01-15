@@ -1,4 +1,4 @@
-module github.com/shaygef123/SleePod-controller
+module github.com/sleepod-io/sleepod-controller
 
 go 1.24.0
 

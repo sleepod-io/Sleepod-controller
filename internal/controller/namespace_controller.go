@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
-	"github.com/shaygef123/SleePod-controller/internal/config"
+	sleepodv1alpha1 "github.com/sleepod-io/sleepod-controller/api/v1alpha1"
+	"github.com/sleepod-io/sleepod-controller/internal/config"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

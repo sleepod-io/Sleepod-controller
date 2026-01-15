@@ -12,8 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	sleepodv1alpha1 "github.com/shaygef123/SleePod-controller/api/v1alpha1"
-	"github.com/shaygef123/SleePod-controller/internal/config/utils"
+	sleepodv1alpha1 "github.com/sleepod-io/sleepod-controller/api/v1alpha1"
+	"github.com/sleepod-io/sleepod-controller/internal/config/utils"
 )
 
 // checkAndBuildValidResource validates the SleepPolicy spec and ensures mandatory defaults and cluster sync.
