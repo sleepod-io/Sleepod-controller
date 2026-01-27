@@ -45,7 +45,7 @@ graph TD
 
 1. Add the Helm repository:
    ```bash
-   helm repo add sleepod https://shaygef123.github.io/SleePod-controller
+   helm repo add sleepod https://sleepod-io.github.io/Sleepod-controller
    helm repo update
    ```
 
