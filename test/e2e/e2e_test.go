@@ -505,6 +505,170 @@ spec:
 				}
 				Eventually(verifyScaledUp, 2*time.Minute, time.Second).Should(Succeed())
 			})
+
+			It("should respect default.enable: false", func() {
+				By("creating a deployment")
+				deploymentName := "policy-deployment-disabled"
+				deploymentYaml := fmt.Sprintf(`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    app: %s
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: %s
+  template:
+    metadata:
+      labels:
+        app: %s
+    spec:
+      containers:
+      - name: nginx
+        image: nginxinc/nginx-unprivileged:latest
+`, deploymentName, policyTestNamespace, deploymentName, deploymentName, deploymentName)
+
+				tmpTargetFile, err := os.CreateTemp("", "policy-target-disabled-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = os.Remove(tmpTargetFile.Name()) }()
+				_, err = tmpTargetFile.WriteString(deploymentYaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpTargetFile.Close()).NotTo(HaveOccurred())
+
+				cmd := exec.Command("kubectl", "apply", "-f", tmpTargetFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("creating a SleepPolicy with default.enable: false")
+				policyName := "e2e-policy-disabled"
+				policyYaml := fmt.Sprintf(`
+apiVersion: sleepod.sleepod.io/v1alpha1
+kind: SleepPolicy
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  timezone: "UTC"
+  deployments:
+    # Disable default coverage
+    default:
+      enable: false
+`, policyName, policyTestNamespace)
+
+				tmpPolicyFile, err := os.CreateTemp("", "policy-disabled-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = os.Remove(tmpPolicyFile.Name()) }()
+				_, err = tmpPolicyFile.WriteString(policyYaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpPolicyFile.Close()).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "apply", "-f", tmpPolicyFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Expected SleepOrder Name
+				expectedSleepOrderName := fmt.Sprintf("%s-dep-%s", policyName, deploymentName)
+
+				By("verifying SleepOrder is NOT created")
+				Consistently(func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeporder", expectedSleepOrderName, "-n", policyTestNamespace)
+					output, err := utils.Run(cmd)
+					// Verify that we got a NotFound error via output or exit code
+					if err == nil {
+						// If command succeeded, it might have found it OR printed not found.
+						// "kubectl get" returns un-zero exit code if not found usually.
+						// utils.Run captures combined output.
+						g.Expect(output).To(ContainSubstring("NotFound"), "SleepOrder should not be found")
+					} else {
+						// Error is expected (not found)
+						g.Expect(output).To(ContainSubstring("NotFound"))
+					}
+				}, 10*time.Second, time.Second).Should(Succeed())
+			})
+
+			It("should pass workingDays to SleepOrder", func() {
+				By("creating a deployment")
+				deploymentName := "policy-deployment-workingdays"
+				deploymentYaml := fmt.Sprintf(`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    app: %s
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: %s
+  template:
+    metadata:
+      labels:
+        app: %s
+    spec:
+      containers:
+      - name: nginx
+        image: nginxinc/nginx-unprivileged:latest
+`, deploymentName, policyTestNamespace, deploymentName, deploymentName, deploymentName)
+
+				tmpTargetFile, err := os.CreateTemp("", "policy-target-wd-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = os.Remove(tmpTargetFile.Name()) }()
+				_, err = tmpTargetFile.WriteString(deploymentYaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpTargetFile.Close()).NotTo(HaveOccurred())
+
+				cmd := exec.Command("kubectl", "apply", "-f", tmpTargetFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("creating a SleepPolicy with workingDays")
+				policyName := "e2e-policy-wd"
+				// Test workingDays="Monday-Friday"
+				policyYaml := fmt.Sprintf(`
+apiVersion: sleepod.sleepod.io/v1alpha1
+kind: SleepPolicy
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  timezone: "UTC"
+  deployments:
+    %s:
+      enable: true
+      wakeAt: "08:00"
+      sleepAt: "20:00"
+      workingDays: "Monday-Friday"
+`, policyName, policyTestNamespace, deploymentName)
+
+				tmpPolicyFile, err := os.CreateTemp("", "policy-wd-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = os.Remove(tmpPolicyFile.Name()) }()
+				_, err = tmpPolicyFile.WriteString(policyYaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpPolicyFile.Close()).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "apply", "-f", tmpPolicyFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+
+				expectedSleepOrderName := fmt.Sprintf("%s-dep-%s", policyName, deploymentName)
+
+				By("verifying SleepOrder has workingDays set")
+				verifyWorkingDays := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeporder", expectedSleepOrderName, "-n", policyTestNamespace,
+						"-o", "jsonpath={.spec.workingDays}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("Monday-Friday"), "WorkingDays should be passed to SleepOrder")
+				}
+				Eventually(verifyWorkingDays, 2*time.Minute, time.Second).Should(Succeed())
+			})
 		})
 	})
 })

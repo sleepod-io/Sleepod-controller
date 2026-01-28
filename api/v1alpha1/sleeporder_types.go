@@ -30,6 +30,8 @@ type SleepOrderSpec struct {
 	SleepAt string `json:"sleepAt"`
 	// +kubebuilder:default="UTC"
 	Timezone string `json:"timezone,omitempty"`
+	// +optional
+	WorkingDays string `json:"workingDays,omitempty"`
 }
 
 type TargetRef struct {
