@@ -112,6 +112,7 @@ The Helm chart can be customized using `values.yaml`. Here are the most common c
 | `config.defaultSleepAt` | Default sleep time | `"20:00"` |
 | `config.defaultWakeAt` | Default wake time | `"08:00"` |
 | `config.excludedNamespaces` | List of namespaces the controller should ignore | `kube-system`, etc. |
+| `sleepod.io/exclude` | Annotation to exclude a namespace from being managed | `"true"` (on Namespace) |
 | `config.namespaceDelaySeconds`| Delay before processing changes | `20` |
 | `config.weekend` | Comma-separated list of weekend days (e.g., "Saturday,Sunday") | `""` |
 | `config.excludeWeekend` | Whether to automatically exclude weekend days from default working days | `false` |

@@ -59,8 +59,8 @@ func Load() *Config {
 	return config
 }
 
-// IsNamespaceExcluded checks if a namespace is in the exclusion list
-func (c *Config) IsNamespaceExcluded(namespace string) bool {
+// IsNamespaceExcludedFromConfig checks if a namespace is in the exclusion list
+func (c *Config) IsNamespaceExcludedFromConfig(namespace string) bool {
 	for _, excluded := range c.ExcludedNamespaces {
 		if excluded == namespace {
 			return true
@@ -75,7 +75,7 @@ func (c *Config) GetNamespaceDelay() time.Duration {
 }
 
 // Helper functions for str environment variable parsing
-func getEnvStrOrDefault(key, defaultValue string) string {
+func getEnvStrOrDefault(key string, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}

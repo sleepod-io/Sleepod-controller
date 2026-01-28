@@ -51,6 +51,7 @@ config:
   defaultTimezone: "UTC"
   namespaceDelaySeconds: 20
   excludedNamespaces:
+    # Also possible to exclude by annotation: sleepod.io/exclude: "true" on the Namespace
     - kube-system
     - kube-public
     - kube-node-lease

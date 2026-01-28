@@ -670,6 +670,77 @@ spec:
 				Eventually(verifyWorkingDays, 2*time.Minute, time.Second).Should(Succeed())
 			})
 		})
+
+		Context("Namespace Controller", func() {
+			exclusionTestNamespace := "e2e-exclusion-test"
+
+			AfterEach(func() {
+				cmd := exec.Command("kubectl", "delete", "ns", exclusionTestNamespace)
+				_, _ = utils.Run(cmd)
+			})
+
+			It("should exclude namespace from SleepPolicy creation when annotated", func() {
+				By("creating a namespace with exclusion annotation")
+				nsYaml := fmt.Sprintf(`
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: %s
+  annotations:
+    sleepod.io/exclude: "true"
+`, exclusionTestNamespace)
+				tmpFile, err := os.CreateTemp("", "ns-exclude-*.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = os.Remove(tmpFile.Name()) }()
+				_, err = tmpFile.WriteString(nsYaml)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(tmpFile.Close()).NotTo(HaveOccurred())
+
+				cmd := exec.Command("kubectl", "apply", "-f", tmpFile.Name())
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("verifying SleepPolicy is NOT created (excluded)")
+				Consistently(func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeppolicy", "default-sleeppolicy", "-n", exclusionTestNamespace)
+					output, err := utils.Run(cmd)
+					if err == nil {
+						g.Expect(output).To(ContainSubstring("NotFound"), "SleepPolicy should not exist in excluded namespace")
+					} else {
+						g.Expect(output).To(ContainSubstring("NotFound"))
+					}
+				}, 10*time.Second, time.Second).Should(Succeed())
+
+				By("removing the exclusion annotation")
+				cmd = exec.Command("kubectl", "annotate", "ns", exclusionTestNamespace, "sleepod.io/exclude-")
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("verifying SleepPolicy IS created (inclusion)")
+				Eventually(func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeppolicy", "default-sleeppolicy", "-n", exclusionTestNamespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "SleepPolicy should be created after removing exclusion")
+				}, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("adding the exclusion annotation back")
+				cmd = exec.Command("kubectl", "annotate", "ns", exclusionTestNamespace, "sleepod.io/exclude=true", "--overwrite")
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("verifying SleepPolicy IS deleted (re-excluded)")
+				Eventually(func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "sleeppolicy", "default-sleeppolicy", "-n", exclusionTestNamespace)
+					output, err := utils.Run(cmd)
+					if err == nil {
+						g.Expect(output).To(ContainSubstring("NotFound"))
+					} else {
+						g.Expect(output).To(ContainSubstring("NotFound"))
+					}
+				}, 2*time.Minute, time.Second).Should(Succeed())
+			})
+		})
+
 	})
 })
 
