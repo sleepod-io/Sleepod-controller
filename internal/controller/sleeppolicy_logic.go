@@ -79,26 +79,13 @@ func (r *SleepPolicyReconciler) checkAndBuildValidResource(ctx context.Context, 
 		changed = true
 	}
 	// Always Enforce Default is Enabled if present
-	// TODO: consider add some "turn of" mechanism. maybe global enable, or allow default to be false?
-	if def, ok := policy.Spec.Deployments["default"]; ok {
-		if !def.Enable {
-			def.Enable = true
-			policy.Spec.Deployments["default"] = def
-			changed = true
-		}
-	}
+	// We now allow default to be false (disabled).
 
 	if len(policy.Spec.StatefulSets) == 0 {
 		policy.Spec.StatefulSets["default"] = sleepodv1alpha1.PolicyConfig{Enable: true}
 		changed = true
 	}
-	if def, ok := policy.Spec.StatefulSets["default"]; ok {
-		if !def.Enable {
-			def.Enable = true
-			policy.Spec.StatefulSets["default"] = def
-			changed = true
-		}
-	}
+	// We now allow default to be false (disabled).
 
 	// Check if resources in Policy actually exist in Cluster
 	for depName := range policy.Spec.Deployments {
