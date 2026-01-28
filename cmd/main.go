@@ -21,6 +21,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"time"
 
 	"go.uber.org/zap/zapcore"
 
@@ -193,6 +194,9 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "b929daa5.sleepod.io",
+		LeaseDuration:          func() *time.Duration { d := 60 * time.Second; return &d }(),
+		RenewDeadline:          func() *time.Duration { d := 40 * time.Second; return &d }(),
+		RetryPeriod:            func() *time.Duration { d := 10 * time.Second; return &d }(),
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

@@ -28,6 +28,8 @@ type ResourceSleepParams struct {
 	SleepAt   string `json:"sleepAt,omitempty"`
 	WakeAt    string `json:"wakeAt,omitempty"`
 	Timezone  string `json:"timezone,omitempty"`
+	// +optional
+	WorkingDays string `json:"workingDays,omitempty"`
 }
 
 // PolicyConfig defines the sleep configuration for a specific resource or default.
@@ -42,6 +44,8 @@ type PolicyConfig struct {
 	SleepAt string `json:"sleepAt,omitempty"`
 	// +optional
 	Timezone string `json:"timezone,omitempty"`
+	// +optional
+	WorkingDays string `json:"workingDays,omitempty"`
 }
 
 // SleepPolicySpec defines the desired state of SleepPolicy.

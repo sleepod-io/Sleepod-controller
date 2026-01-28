@@ -79,14 +79,19 @@ spec:
       enable: true
       sleepAt: "20:00" # 8:00 PM
       wakeAt: "08:00"  # 8:00 AM
+      workingDays: "Monday-Friday" # Optional: Restrict to working days only
     # specific deployment override
     backend-service:
       enable: false # Do not sleep this service
-  statefulsets:
+  statefulSets:
     db-primary:
       enable: true
       sleepAt: "22:00"
       wakeAt: "06:00"
+      workingDays: "Monday-Friday"
+    # Example: Disable default for statefulsets (only db-primary will be managed)
+    default:
+      enable: false
 ```
 
 ### 2. Apply the Policy
@@ -108,6 +113,8 @@ The Helm chart can be customized using `values.yaml`. Here are the most common c
 | `config.defaultWakeAt` | Default wake time | `"08:00"` |
 | `config.excludedNamespaces` | List of namespaces the controller should ignore | `kube-system`, etc. |
 | `config.namespaceDelaySeconds`| Delay before processing changes | `20` |
+| `config.weekend` | Comma-separated list of weekend days (e.g., "Saturday,Sunday") | `""` |
+| `config.excludeWeekend` | Whether to automatically exclude weekend days from default working days | `false` |
 | `controllerManager.replicas` | Number of controller replicas | `1` |
 | `resources.requests/limits` | CPU/Memory requests and limits | (See values.yaml) |
 

@@ -8,6 +8,7 @@ controllerManager:
     image:
       repository: ghcr.io/sleepod-io/sleepod-controller
       tag: latest
+      pullPolicy: IfNotPresent
     args:
       - "--leader-elect"
       - "--metrics-bind-address=:8443"
@@ -55,6 +56,8 @@ config:
     - kube-node-lease
     - local-path-storage
   logLevel: info
+  weekend: "friday,saturday"
+  excludeWeekend: true
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:

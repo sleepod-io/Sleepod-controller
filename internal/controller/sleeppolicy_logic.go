@@ -188,13 +188,23 @@ func (r *SleepPolicyReconciler) resolveParams(namespace, name, kind string, poli
 		timezone = r.Config.DefaultTimezone
 	}
 
+	workingDays := policy.WorkingDays
+	if workingDays == "" {
+		if r.Config.ExcludeWeekend && r.Config.Weekend != "" {
+			workingDays = r.calculateWorkingDays(r.Config.Weekend)
+		} else {
+			workingDays = "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday"
+		}
+	}
+
 	return &sleepodv1alpha1.ResourceSleepParams{
-		Name:      name,
-		Namespace: namespace,
-		Kind:      kind,
-		SleepAt:   sleepAt,
-		WakeAt:    wakeAt,
-		Timezone:  timezone,
+		Name:        name,
+		Namespace:   namespace,
+		Kind:        kind,
+		SleepAt:     sleepAt,
+		WakeAt:      wakeAt,
+		Timezone:    timezone,
+		WorkingDays: workingDays,
 	}
 }
 
@@ -257,9 +267,10 @@ func (r *SleepPolicyReconciler) DeploySleepOrderResource(ctx context.Context, po
 				Kind: resourceDesiredState.Kind,
 				Name: resourceDesiredState.Name,
 			},
-			WakeAt:   resourceDesiredState.WakeAt,
-			SleepAt:  resourceDesiredState.SleepAt,
-			Timezone: resourceDesiredState.Timezone,
+			WakeAt:      resourceDesiredState.WakeAt,
+			SleepAt:     resourceDesiredState.SleepAt,
+			Timezone:    resourceDesiredState.Timezone,
+			WorkingDays: resourceDesiredState.WorkingDays,
 		},
 	}
 	switch action {
@@ -309,4 +320,24 @@ func getSleepOrderName(policyName, resourceKind, resourceName string) string {
 		kind = "sts"
 	}
 	return fmt.Sprintf("%s-%s-%s", policyName, kind, resourceName)
+}
+
+func (r *SleepPolicyReconciler) calculateWorkingDays(weekend string) string {
+	allDays := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+	weekendDays := strings.Split(weekend, ",")
+	workspace := make([]string, 0)
+
+	for _, day := range allDays {
+		isWeekend := false
+		for _, w := range weekendDays {
+			if strings.EqualFold(strings.TrimSpace(day), strings.TrimSpace(w)) {
+				isWeekend = true
+				break
+			}
+		}
+		if !isWeekend {
+			workspace = append(workspace, day)
+		}
+	}
+	return strings.Join(workspace, ",")
 }

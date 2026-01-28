@@ -35,6 +35,7 @@ spec:
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}
+          imagePullPolicy: {{ .Values.controllerManager.container.image.pullPolicy | default "IfNotPresent" }}
           env:
             - name: SLEEPOD_DEFAULT_WAKE_AT
               value: {{ .Values.config.defaultWakeAt | quote }}

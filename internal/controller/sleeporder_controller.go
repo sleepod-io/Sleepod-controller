@@ -139,7 +139,7 @@ func (r *SleepOrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// calculate Time State
-	shouldSleep, nextEvent, _, err := logic.GetTimeState(time.Now(), sleepOrderSpec.WakeAt, sleepOrderSpec.SleepAt, sleepOrderSpec.Timezone)
+	shouldSleep, nextEvent, _, err := logic.GetTimeState(time.Now(), sleepOrderSpec.WakeAt, sleepOrderSpec.SleepAt, sleepOrderSpec.Timezone, sleepOrderSpec.WorkingDays)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

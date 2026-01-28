@@ -16,6 +16,10 @@ type Config struct {
 	// Namespace controller configuration
 	NamespaceDelaySeconds int
 	ExcludedNamespaces    []string
+
+	// Global policy defaults
+	Weekend        string
+	ExcludeWeekend bool
 }
 
 // Default configuration constants
@@ -25,6 +29,8 @@ const (
 	DefaultSleepAt               = "20:00"
 	DefaultTimezone              = "UTC"
 	DefaultNamespaceDelaySeconds = 20
+	DefaultWeekend               = ""
+	DefaultExcludeWeekend        = false
 )
 
 var DefaultExcludedNamespaces = []string{
@@ -42,6 +48,8 @@ func Load() *Config {
 		DefaultTimezone:       getEnvStrOrDefault("SLEEPOD_DEFAULT_TIMEZONE", DefaultTimezone),
 		ExcludedNamespaces:    getEnvStringSliceOrDefault("SLEEPOD_EXCLUDED_NAMESPACES", DefaultExcludedNamespaces),
 		NamespaceDelaySeconds: getEnvIntOrDefault("SLEEPOD_NAMESPACE_DELAY_SECONDS", DefaultNamespaceDelaySeconds),
+		Weekend:               getEnvStrOrDefault("SLEEPOD_WEEKEND", DefaultWeekend),
+		ExcludeWeekend:        getEnvBoolOrDefault("SLEEPOD_EXCLUDE_WEEKEND", DefaultExcludeWeekend),
 	}
 	namespace := os.Getenv("SLEEPOD_NAMESPACE")
 	if namespace != "" {
@@ -87,6 +95,15 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 func getEnvStringSliceOrDefault(key string, defaultValue []string) []string {
 	if value := os.Getenv(key); value != "" {
 		return strings.Split(value, ",")
+	}
+	return defaultValue
+}
+
+func getEnvBoolOrDefault(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
 	}
 	return defaultValue
 }

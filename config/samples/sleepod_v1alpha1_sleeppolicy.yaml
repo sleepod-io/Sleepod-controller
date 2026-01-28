@@ -55,8 +55,12 @@ spec:
       enable: true
       sleepAt: "08:00"
       wakeAt: "09:00"
+      workingDays: "Monday-Friday" # Optional: Override default
   statefulSets:
     test-statefulset:
       enable: false
       sleepAt: "20:30"
       wakeAt: "08:30"
+    default:
+      enable: true
+      workingDays: "Sunday,Monday,Tuesday,Wednesday,Thursday"

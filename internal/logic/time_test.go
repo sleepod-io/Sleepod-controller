@@ -79,7 +79,7 @@ func TestShouldBeAsleep(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ShouldBeAsleep(tt.now, tt.wakeAt, tt.sleepAt, tt.timezone)
+			got, err := ShouldBeAsleep(tt.now, tt.wakeAt, tt.sleepAt, tt.timezone, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ShouldBeAsleep() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -89,6 +89,54 @@ func TestShouldBeAsleep(t *testing.T) {
 			}
 		})
 	}
+
+	// Additional Tests for Working Days
+	t.Run("Working Days Logic", func(t *testing.T) {
+		// 2025-11-22 is Saturday
+		saturday := parseTime("2025-11-22T12:00:00Z")
+		// 2025-11-24 is Monday
+		monday := parseTime("2025-11-24T12:00:00Z")
+
+		// Case 1: Weekend, M-F working days -> Should Sleep
+		shouldSleep, err := ShouldBeAsleep(saturday, "08:00", "20:00", "UTC", "Monday-Friday")
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !shouldSleep {
+			t.Errorf("Expected to sleep on weekend, but got awake")
+		}
+
+		// Case 2: Monday, M-F working days -> Should Awake (12:00 is between 08-20)
+		shouldSleep, err = ShouldBeAsleep(monday, "08:00", "20:00", "UTC", "Monday-Friday")
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if shouldSleep {
+			t.Errorf("Expected to be awake on Monday, but got sleep")
+		}
+
+		// Case 3: Weekend Overnight Shift (Friday Night to Saturday Morning)
+		// Friday 22:00 -> Shift Started -> Working Day -> Awake
+		fridayNight := parseTime("2025-11-21T23:00:00Z") // Friday
+		shouldSleep, _ = ShouldBeAsleep(fridayNight, "20:00", "06:00", "UTC", "Monday-Friday")
+		if shouldSleep {
+			t.Errorf("Expected to be awake on Friday Night")
+		}
+
+		// Saturday 04:00 -> Shift continued -> Effective Day Friday -> Working Day -> Awake
+		saturdayMorning := parseTime("2025-11-22T04:00:00Z") // Saturday
+		shouldSleep, _ = ShouldBeAsleep(saturdayMorning, "20:00", "06:00", "UTC", "Monday-Friday")
+		if shouldSleep {
+			t.Errorf("Expected to be awake on Saturday Morning (Friday shift continuation)")
+		}
+
+		// Saturday 23:00 -> Shift Starts -> Saturday is NOT working day -> Sleep
+		saturdayNight := parseTime("2025-11-22T23:00:00Z")
+		shouldSleep, _ = ShouldBeAsleep(saturdayNight, "20:00", "06:00", "UTC", "Monday-Friday")
+		if !shouldSleep {
+			t.Errorf("Expected to be asleep on Saturday Night")
+		}
+	})
 }
 
 func TestGetNextEvent(t *testing.T) {
@@ -142,7 +190,7 @@ func TestGetNextEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotTime, gotEvent, err := GetNextEvent(tt.now, tt.wakeAt, tt.sleepAt, tt.timezone)
+			gotTime, gotEvent, err := GetNextEvent(tt.now, tt.wakeAt, tt.sleepAt, tt.timezone, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetNextEvent() error = %v, wantErr %v", err, tt.wantErr)
 				return

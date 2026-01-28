@@ -374,6 +374,7 @@ func TestReconcile_sleepFlow(t *testing.T) {
 				tt.sleepOrder.Spec.WakeAt,
 				tt.sleepOrder.Spec.SleepAt,
 				tt.sleepOrder.Spec.Timezone,
+				"",
 			)
 			if err != nil {
 				t.Fatalf("GetNextEvent failed: %v", err)
@@ -593,6 +594,7 @@ func TestReconcile_wakeFlow(t *testing.T) {
 				tt.sleepOrder.Spec.WakeAt,
 				tt.sleepOrder.Spec.SleepAt,
 				tt.sleepOrder.Spec.Timezone,
+				"",
 			)
 			if err != nil {
 				t.Fatalf("GetNextEvent failed: %v", err)
