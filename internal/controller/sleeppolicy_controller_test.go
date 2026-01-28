@@ -86,7 +86,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			Expect(policy.Spec.StatefulSets["default"].Enable).To(BeTrue())
 		})
 
-		It("should prevent disabling the default config", func() {
+		It("should allow disabling the default config", func() {
 			policy := &sleepodv1alpha1.SleepPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepPolicySpec{
@@ -102,9 +102,9 @@ var _ = Describe("SleepPolicy Controller", func() {
 			changed, err := reconciler.checkAndBuildValidResource(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
 
-			Expect(changed).To(BeTrue())
-			Expect(policy.Spec.Deployments["default"].Enable).To(BeTrue())
-			Expect(policy.Spec.StatefulSets["default"].Enable).To(BeTrue())
+			Expect(changed).To(BeFalse())
+			Expect(policy.Spec.Deployments["default"].Enable).To(BeFalse())
+			Expect(policy.Spec.StatefulSets["default"].Enable).To(BeFalse())
 		})
 
 		It("should return false if policy is already valid", func() {
