@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -126,13 +127,31 @@ func (r *SleepPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func FetchSleepPolicyOrContinue(ctx context.Context, r client.Client, req ctrl.Request) (*sleepodv1alpha1.SleepPolicy, error) {
-	SleepPolicyObj := &sleepodv1alpha1.SleepPolicy{}
-	err := r.Get(ctx, req.NamespacedName, SleepPolicyObj)
+	SleepPolicyList := &sleepodv1alpha1.SleepPolicyList{}
+	err := r.List(ctx, SleepPolicyList, client.InNamespace(req.Namespace))
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return SleepPolicyObj, nil
+	switch len(SleepPolicyList.Items) {
+	case 0:
+		return nil, nil
+	case 1:
+		return &SleepPolicyList.Items[0], nil
+	case 2:
+		// return the one that is not default policy (DefaultSleepPolicyName), if both are default return error, if both are not default return error:
+		sp1, sp2 := SleepPolicyList.Items[0], SleepPolicyList.Items[1]
+		if sp1.Name == DefaultSleepPolicyName && sp2.Name != DefaultSleepPolicyName {
+			return &sp2, nil
+		}
+		if sp1.Name != DefaultSleepPolicyName && sp2.Name == DefaultSleepPolicyName {
+			return &sp1, nil
+		}
+		return nil, fmt.Errorf("found 2 sleep policies on the namespace %s. Please remove one of them", req.Namespace)
+
+	default:
+		return nil, fmt.Errorf("found %d sleep policies on the namespace %s. Please remove the extra policies", len(SleepPolicyList.Items), req.Namespace)
+	}
 }

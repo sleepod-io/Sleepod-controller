@@ -646,6 +646,70 @@ var _ = Describe("SleepPolicy Controller", func() {
 		})
 	})
 
+	Context("Logic: FetchSleepPolicyOrContinue", func() {
+		var fakeClient client.Client
+		var ctx context.Context = context.Background()
+
+		BeforeEach(func() {
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
+		})
+
+		It("should return nil if no policies exist", func() {
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "any", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(policy).To(BeNil())
+		})
+
+		It("should return the single policy if one exists", func() {
+			existing := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "my-policy", Namespace: "default"}}
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(existing).Build()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "my-policy", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(policy).ToNot(BeNil())
+			Expect(policy.Name).To(Equal("my-policy"))
+		})
+
+		It("should return non-default policy if two exist (one default, one custom)", func() {
+			def := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: DefaultSleepPolicyName, Namespace: "default"}}
+			custom := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-policy", Namespace: "default"}}
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(def, custom).Build()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "any", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(policy).ToNot(BeNil())
+			Expect(policy.Name).To(Equal("custom-policy"))
+		})
+
+		It("should error if two non-default policies exist", func() {
+			p1 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-1", Namespace: "default"}}
+			p2 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-2", Namespace: "default"}}
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(p1, p2).Build()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "any", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).To(HaveOccurred())
+			Expect(policy).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("found 2 sleep policies"))
+		})
+
+		It("should error if more than 2 policies exist", func() {
+			p1 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-1", Namespace: "default"}}
+			p2 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-2", Namespace: "default"}}
+			p3 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-3", Namespace: "default"}}
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(p1, p2, p3).Build()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "any", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).To(HaveOccurred())
+			Expect(policy).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("found 3 sleep policies"))
+		})
+	})
+
 	// Integration Tests
 	Context("Integration: Reconciliation Logic", func() {
 		ctx := context.Background()
