@@ -2,6 +2,18 @@ apiVersion: v1
 entries:
   sleepod-controller:
   - apiVersion: v2
+    appVersion: 0.0.2
+    created: "2026-01-30T15:06:39.242112931Z"
+    description: A Helm chart for Sleepod Controller, which allow you to manages sleep/wake
+      schedules for Kubernetes workloads using namespace policies to reduce costs.
+    digest: e0a10671aae4b00b422f21358c20f503e4980399963efc4a369efd0c7cf2c822
+    icon: https://raw.githubusercontent.com/sleepod-io/Sleepod-controller/main/assets/logo.png
+    name: sleepod-controller
+    type: application
+    urls:
+    - https://github.com/sleepod-io/Sleepod-controller/releases/download/sleepod-controller-0.0.2/sleepod-controller-0.0.2.tgz
+    version: 0.0.2
+  - apiVersion: v2
     appVersion: 0.0.1
     created: "2026-01-15T16:26:13.373734436Z"
     description: A Helm chart to distribute the project sleepod-controller
@@ -12,4 +24,4 @@ entries:
     urls:
     - https://github.com/sleepod-io/Sleepod-controller/releases/download/sleepod-controller-0.0.1/sleepod-controller-0.0.1.tgz
     version: 0.0.1
-generated: "2026-01-15T16:26:13.373744365Z"
+generated: "2026-01-30T15:06:39.242125374Z"
