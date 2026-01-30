@@ -31,3 +31,8 @@ const (
 const (
 	sleepPolicyFinalizer string = "sleepod.io/sleep-policy-finalizer"
 )
+
+// Namespace Annotations:
+const (
+	namespaceExcludeAnnotation string = "sleepod.io/exclude"
+)

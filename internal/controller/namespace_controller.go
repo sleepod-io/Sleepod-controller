@@ -49,9 +49,24 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: namespaceDelay - age}, nil
 	}
 
-	// check if namespace is in excluded list
-	if r.Config.IsNamespaceExcluded(namespace.Name) {
+	// check if namespace is excluded from config or from annotations
+	// check if sleepPolicy resources exists in the exclude ns and if yes delete them
+	if r.Config.IsNamespaceExcludedFromConfig(namespace.Name) || r.isNamespaceExcludedFromAnnotations(namespace) {
 		log.Info("Namespace is in excluded list, skipping reconciliation", "namespace", namespace.Name)
+		sleepPolicyList := &sleepodv1alpha1.SleepPolicyList{}
+		err = r.List(ctx, sleepPolicyList, &client.ListOptions{Namespace: namespace.Name})
+		if err == nil {
+			if len(sleepPolicyList.Items) > 0 {
+				log.V(1).Info("SleepPolicy exists in excluded namespace, deleting", "namespace", namespace.Name)
+				for _, sleepPolicy := range sleepPolicyList.Items {
+					err = r.Delete(ctx, &sleepPolicy)
+					if err != nil {
+						log.Error(err, "Failed to delete SleepPolicy", "namespace", namespace.Name)
+						return ctrl.Result{RequeueAfter: namespaceDelay}, nil
+					}
+				}
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -77,6 +92,15 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
+func (r *NamespaceReconciler) isNamespaceExcludedFromAnnotations(namespace *corev1.Namespace) bool {
+	if namespace.Annotations == nil {
+		return false
+	}
+	if _, ok := namespace.Annotations[namespaceExcludeAnnotation]; ok {
+		return true
+	}
+	return false
+}
 func (r *NamespaceReconciler) createDefaultSleepPolicy(ctx context.Context, namespace *corev1.Namespace) error {
 	defaultSleepPolicy := sleepodv1alpha1.SleepPolicy{
 		ObjectMeta: metav1.ObjectMeta{
