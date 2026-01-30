@@ -60,6 +60,8 @@ spec:
                     wakeAt:
                       pattern: ^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$
                       type: string
+                    workingDays:
+                      type: string
                   required:
                   - enable
                   type: object
@@ -80,6 +82,8 @@ spec:
                       type: string
                     wakeAt:
                       pattern: ^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$
+                      type: string
+                    workingDays:
                       type: string
                   required:
                   - enable
@@ -111,6 +115,8 @@ spec:
                     timezone:
                       type: string
                     wakeAt:
+                      type: string
+                    workingDays:
                       type: string
                   type: object
                 description: List of resources currently managed by this policy.
