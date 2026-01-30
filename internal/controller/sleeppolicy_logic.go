@@ -136,7 +136,7 @@ func (r *SleepPolicyReconciler) buildTheDesiredState(ctx context.Context, policy
 	}
 	for _, dep := range deploymentList.Items {
 		if params := r.getEffectiveParams(policy.Namespace, dep.Name, kindDeployment, policy.Spec.Deployments); params != nil {
-			key := fmt.Sprintf("%s/%s", params.Kind, params.Name)
+			key := getSleepOrderName(policy.Name, params.Kind, params.Name)
 			desiredState[key] = *params
 		}
 	}
@@ -148,7 +148,7 @@ func (r *SleepPolicyReconciler) buildTheDesiredState(ctx context.Context, policy
 	}
 	for _, sts := range stsList.Items {
 		if params := r.getEffectiveParams(policy.Namespace, sts.Name, kindStatefulSet, policy.Spec.StatefulSets); params != nil {
-			key := fmt.Sprintf("%s/%s", params.Kind, params.Name)
+			key := getSleepOrderName(policy.Name, params.Kind, params.Name)
 			desiredState[key] = *params
 		}
 	}
@@ -215,8 +215,7 @@ func (r *SleepPolicyReconciler) deleteUndesiredResources(ctx context.Context, na
 		return err
 	}
 	for _, sleepOrder := range sleepOrderList.Items {
-		key := fmt.Sprintf("%s/%s", sleepOrder.Spec.TargetRef.Kind, sleepOrder.Spec.TargetRef.Name)
-		if _, ok := desiredState[key]; !ok {
+		if _, ok := desiredState[sleepOrder.Name]; !ok {
 			if err := r.Delete(ctx, &sleepOrder); err != nil {
 				if client.IgnoreNotFound(err) != nil {
 					return err

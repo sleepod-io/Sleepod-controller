@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -231,8 +232,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 
 			// Assert
 			Expect(err).ToNot(HaveOccurred())
-			Expect(desiredMap).To(HaveKey("Deployment/app-default"))
-			params := desiredMap["Deployment/app-default"]
+			Expect(desiredMap).To(HaveKey("policy-dep-app-default"))
+			params := desiredMap["policy-dep-app-default"]
 			Expect(params.WakeAt).To(Equal("08:00"))  // Global Default
 			Expect(params.SleepAt).To(Equal("20:00")) // Global Default
 			Expect(params.Timezone).To(Equal("UTC"))  // Global Default
@@ -263,8 +264,8 @@ var _ = Describe("SleepPolicy Controller", func() {
 
 			// Assert
 			Expect(err).ToNot(HaveOccurred())
-			Expect(desiredMap).To(HaveKey("Deployment/app-special"))
-			params := desiredMap["Deployment/app-special"]
+			Expect(desiredMap).To(HaveKey("policy-dep-app-special"))
+			params := desiredMap["policy-dep-app-special"]
 			Expect(params.WakeAt).To(Equal("10:00"))  // Specific
 			Expect(params.SleepAt).To(Equal("20:00")) // Default (inherited because missing in specific)
 			Expect(params.Timezone).To(Equal("CST"))  // Specific
@@ -291,7 +292,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 
 			// Assert
 			Expect(err).ToNot(HaveOccurred())
-			Expect(desiredMap).ToNot(HaveKey("Deployment/app-disabled"))
+			Expect(desiredMap).ToNot(HaveKey("policy-dep-app-disabled"))
 		})
 	})
 
@@ -403,8 +404,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepPolicySpec{
 					Deployments: map[string]sleepodv1alpha1.PolicyConfig{
-						"app-nochange": {Enable: true, WakeAt: "08:00", SleepAt: "20:00", Timezone: "UTC"},
-						"default":      {Enable: true},
+						"default": {Enable: true, WakeAt: "08:00", SleepAt: "20:00", Timezone: "UTC"},
 					},
 				},
 			}
@@ -549,7 +549,6 @@ var _ = Describe("SleepPolicy Controller", func() {
 			}
 
 			err := reconciler.DeploySleepOrderResource(context.Background(), policy, resourceDesiredState, actionUpdate)
-
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})
@@ -608,7 +607,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 			// Setup: Cluster has StatefulSet 'app-delete'
 			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "desired-app", Namespace: "default"}}
 			sleepOrder := &sleepodv1alpha1.SleepOrder{
-				ObjectMeta: metav1.ObjectMeta{Name: "default-desired-app", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-sts-desired-app", Namespace: "default"},
 				Spec: sleepodv1alpha1.SleepOrderSpec{
 					TargetRef: sleepodv1alpha1.TargetRef{
 						Kind: "StatefulSet",
@@ -631,7 +630,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 			resourceDesiredState = map[string]sleepodv1alpha1.ResourceSleepParams{
-				"StatefulSet/desired-app": {
+				"policy-sts-desired-app": {
 					Name:      "desired-app",
 					Namespace: "default",
 					WakeAt:    "08:00",
@@ -642,7 +641,112 @@ var _ = Describe("SleepPolicy Controller", func() {
 
 			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, resourceDesiredState)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(reconciler.Client.Get(context.Background(), types.NamespacedName{Name: "default-desired-app", Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).To(Succeed())
+			Expect(reconciler.Client.Get(context.Background(), types.NamespacedName{Name: "policy-sts-desired-app", Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).To(Succeed())
+		})
+	})
+
+	Context("Logic: FetchSleepPolicyOrContinue", func() {
+		var fakeClient client.Client
+		var ctx = context.Background()
+
+		BeforeEach(func() {
+			s := scheme.Scheme
+			_ = sleepodv1alpha1.AddToScheme(s)
+			fakeClient = fake.NewClientBuilder().WithScheme(s).Build()
+		})
+
+		It("should return nil if no policies exist", func() {
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "any", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(policy).To(BeNil())
+		})
+
+		It("should return the single policy if one exists", func() {
+			existing := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "my-policy", Namespace: "default"}}
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(existing).Build()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "my-policy", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(policy).ToNot(BeNil())
+			Expect(policy.Name).To(Equal("my-policy"))
+		})
+
+		It("should return non-default policy if two exist (one default, one custom)", func() {
+			def := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: DefaultSleepPolicyName, Namespace: "default"}}
+			custom := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-policy", Namespace: "default"}}
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(def, custom).Build()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "any", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(policy).ToNot(BeNil())
+			Expect(policy.Name).To(Equal("custom-policy"))
+		})
+
+		It("should error if two non-default policies exist", func() {
+			p1 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-1", Namespace: "default"}}
+			p2 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-2", Namespace: "default"}}
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(p1, p2).Build()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "any", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).To(HaveOccurred())
+			Expect(policy).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("found 2 sleep policies"))
+		})
+
+		It("should error if more than 2 policies exist", func() {
+			p1 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-1", Namespace: "default"}}
+			p2 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-2", Namespace: "default"}}
+			p3 := &sleepodv1alpha1.SleepPolicy{ObjectMeta: metav1.ObjectMeta{Name: "custom-3", Namespace: "default"}}
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(p1, p2, p3).Build()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "any", Namespace: "default"}}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).To(HaveOccurred())
+			Expect(policy).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("found 3 sleep policies"))
+		})
+
+		It("should return shadowed default policy if it is being deleted", func() {
+			s := runtime.NewScheme()
+			_ = sleepodv1alpha1.AddToScheme(s)
+
+			defKey := types.NamespacedName{Name: DefaultSleepPolicyName, Namespace: "default"}
+			def := &sleepodv1alpha1.SleepPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "SleepPolicy",
+					APIVersion: "sleepod.sleepod.io/v1alpha1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       DefaultSleepPolicyName,
+					Namespace:  "default",
+					Finalizers: []string{sleepPolicyFinalizer},
+				},
+			}
+			custom := &sleepodv1alpha1.SleepPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "SleepPolicy",
+					APIVersion: "sleepod.sleepod.io/v1alpha1",
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: "custom-policy", Namespace: "default"},
+			}
+			fakeClient = fake.NewClientBuilder().WithScheme(s).Build()
+			Expect(fakeClient.Create(ctx, def)).To(Succeed())
+			Expect(fakeClient.Create(ctx, custom)).To(Succeed())
+
+			// Mark def as deleted
+			Expect(fakeClient.Delete(ctx, def)).To(Succeed())
+			// Re-fetch to ensure it has deletion timestamp in the client (Create Update Delete loop)
+			// Actually fake client Delete sets the timestamp.
+
+			req := ctrl.Request{NamespacedName: defKey}
+			policy, err := FetchSleepPolicyOrContinue(ctx, fakeClient, req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(policy).ToNot(BeNil())
+			Expect(policy.Name).To(Equal(DefaultSleepPolicyName))
 		})
 	})
 
