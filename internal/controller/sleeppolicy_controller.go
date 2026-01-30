@@ -135,6 +135,14 @@ func FetchSleepPolicyOrContinue(ctx context.Context, r client.Client, req ctrl.R
 		}
 		return nil, err
 	}
+	// Check if the specific resource we correspond to is being deleted.
+	// If so, we MUST return it so the reconciler can remove finalizers.
+	for _, sp := range SleepPolicyList.Items {
+		if sp.Name == req.Name && sp.DeletionTimestamp != nil {
+			return &sp, nil
+		}
+	}
+
 	switch len(SleepPolicyList.Items) {
 	case 0:
 		return nil, nil
