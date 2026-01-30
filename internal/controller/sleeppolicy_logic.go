@@ -208,7 +208,7 @@ func (r *SleepPolicyReconciler) resolveParams(namespace, name, kind string, poli
 	}
 }
 
-func (r *SleepPolicyReconciler) deleteUndesiredResources(ctx context.Context, namespace string, policyName string, desiredState map[string]sleepodv1alpha1.ResourceSleepParams) error {
+func (r *SleepPolicyReconciler) deleteUndesiredResources(ctx context.Context, namespace string, desiredState map[string]sleepodv1alpha1.ResourceSleepParams) error {
 	log := logf.FromContext(ctx)
 	var sleepOrderList sleepodv1alpha1.SleepOrderList
 	if err := r.List(ctx, &sleepOrderList, client.InNamespace(namespace)); err != nil {

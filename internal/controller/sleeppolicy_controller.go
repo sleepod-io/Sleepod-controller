@@ -89,7 +89,7 @@ func (r *SleepPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	err = r.deleteUndesiredResources(ctx, req.Namespace, sleepPolicyObj.Name, desiredState)
+	err = r.deleteUndesiredResources(ctx, req.Namespace, desiredState)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

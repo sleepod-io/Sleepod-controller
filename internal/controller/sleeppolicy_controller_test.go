@@ -597,7 +597,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 
-			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, policy.Name, resourceDesiredState)
+			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, resourceDesiredState)
 			Expect(err).ToNot(HaveOccurred())
 			// verify sleepOrder deleted
 			Expect(reconciler.Client.Get(context.Background(), types.NamespacedName{Name: "default-app-delete", Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).ToNot(Succeed())
@@ -639,7 +639,7 @@ var _ = Describe("SleepPolicy Controller", func() {
 				},
 			}
 
-			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, policy.Name, resourceDesiredState)
+			err := reconciler.deleteUndesiredResources(context.Background(), policy.Namespace, resourceDesiredState)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(reconciler.Client.Get(context.Background(), types.NamespacedName{Name: "policy-sts-desired-app", Namespace: "default"}, &sleepodv1alpha1.SleepOrder{})).To(Succeed())
 		})
