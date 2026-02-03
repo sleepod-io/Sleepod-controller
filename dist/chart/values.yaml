@@ -43,6 +43,9 @@ controllerManager:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
   serviceAccountName: sleepod-controller-controller-manager
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 # [CONFIG]: Application Configuration
 config:
