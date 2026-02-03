@@ -117,6 +117,9 @@ The Helm chart can be customized using `values.yaml`. Here are the most common c
 | `config.weekend` | Comma-separated list of weekend days (e.g., "Saturday,Sunday") | `""` |
 | `config.excludeWeekend` | Whether to automatically exclude weekend days from default working days | `false` |
 | `controllerManager.replicas` | Number of controller replicas | `1` |
+| `controllerManager.nodeSelector` | Node labels for pod assignment | `{}` |
+| `controllerManager.tolerations` | Tolerations for pod assignment | `[]` |
+| `controllerManager.affinity` | Affinity rules for pod assignment | `{}` |
 | `resources.requests/limits` | CPU/Memory requests and limits | (See values.yaml) |
 
 
