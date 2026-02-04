@@ -167,6 +167,7 @@ func (r *NamespaceReconciler) createDefaultSleepPolicy(ctx context.Context, name
 			Name:      DefaultSleepPolicyName,
 		},
 		Spec: sleepodv1alpha1.SleepPolicySpec{
+			Timezone: r.Config.DefaultTimezone,
 			Deployments: map[string]sleepodv1alpha1.PolicyConfig{
 				"default": {
 					Enable: r.Config.DefaultPolicyEnabled,
