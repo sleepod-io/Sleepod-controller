@@ -27,6 +27,7 @@ func TestNamespaceCreation(t *testing.T) {
 
 	defaultConfig := &config.Config{
 		NamespaceDelaySeconds: 1,
+		DefaultPolicyEnabled:  true,
 	}
 
 	tests := []struct {
@@ -75,6 +76,7 @@ func TestNamespaceCreation(t *testing.T) {
 			},
 			config: &config.Config{
 				NamespaceDelaySeconds: 1,
+				DefaultPolicyEnabled:  true,
 				ExcludedNamespaces:    []string{"excluded-namespace"},
 			},
 			expectRequeueAfter:     1 * time.Second,
@@ -233,6 +235,7 @@ func TestNamespaceDeletion(t *testing.T) {
 
 	defaultConfig := &config.Config{
 		NamespaceDelaySeconds: 1,
+		DefaultPolicyEnabled:  true,
 	}
 
 	// create the Reconciler

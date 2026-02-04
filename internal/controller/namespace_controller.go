@@ -110,12 +110,12 @@ func (r *NamespaceReconciler) createDefaultSleepPolicy(ctx context.Context, name
 		Spec: sleepodv1alpha1.SleepPolicySpec{
 			Deployments: map[string]sleepodv1alpha1.PolicyConfig{
 				"default": {
-					Enable: true,
+					Enable: r.Config.DefaultPolicyEnabled,
 				},
 			},
 			StatefulSets: map[string]sleepodv1alpha1.PolicyConfig{
 				"default": {
-					Enable: true,
+					Enable: r.Config.DefaultPolicyEnabled,
 				},
 			},
 		},

@@ -66,7 +66,7 @@ graph TD
 Create a `SleepPolicy` manifest to define your sleep schedule. You can define default settings for all deployments/statefulsets in a namespace, or target specific ones by name.
 
 ```yaml
-apiVersion: sleepod.shaygef.io/v1alpha1
+apiVersion: sleepod.sleepod.io/v1alpha1
 kind: SleepPolicy
 metadata:
   name: dev-team-policy
@@ -116,6 +116,7 @@ The Helm chart can be customized using `values.yaml`. Here are the most common c
 | `config.namespaceDelaySeconds`| Delay before processing changes | `20` |
 | `config.weekend` | Comma-separated list of weekend days (e.g., "Saturday,Sunday") | `""` |
 | `config.excludeWeekend` | Whether to automatically exclude weekend days from default working days | `false` |
+| `config.defaultPolicyEnabled` | Whether default policies are enabled | `false` |
 | `controllerManager.replicas` | Number of controller replicas | `1` |
 | `controllerManager.nodeSelector` | Node labels for pod assignment | `{}` |
 | `controllerManager.tolerations` | Tolerations for pod assignment | `[]` |
