@@ -6,6 +6,7 @@ import (
 
 	sleepodv1alpha1 "github.com/sleepod-io/sleepod-controller/api/v1alpha1"
 	"github.com/sleepod-io/sleepod-controller/internal/config"
+	"github.com/sleepod-io/sleepod-controller/internal/logic"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +23,7 @@ type NamespaceReconciler struct {
 	Config *config.Config
 }
 
-// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;update;patch;delete
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeppolicies,verbs=get;list;watch;create
 
 func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -70,6 +71,47 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
+	// check if expiration date of the namespace is exists
+	if r.Config.NamespaceConfig.TTLEnabled {
+		if expirationDateStr, ok := namespace.Annotations[namespaceExpirationDate]; ok {
+			requeueDuration, err := r.calculateRequeueDuration(expirationDateStr, r.Config.DefaultTimezone)
+			if err != nil {
+				log.Error(err, "Failed to calculate requeue duration", "namespace", namespace.Name)
+				return ctrl.Result{}, nil
+			}
+			if requeueDuration > 0 {
+				log.V(1).Info("Namespace expiration date is not today, requeueing", "namespace", namespace.Name, "requeueDuration", requeueDuration)
+				return ctrl.Result{RequeueAfter: requeueDuration}, nil
+			}
+			log.V(1).Info("Namespace expiration date is today, deleting", "namespace", namespace.Name)
+			err = r.Delete(ctx, namespace)
+			if err != nil {
+				log.Error(err, "Failed to delete namespace", "namespace", namespace.Name)
+				return ctrl.Result{}, nil
+			}
+			return ctrl.Result{}, nil
+		}
+		log.V(1).Info("Namespace expiration date is not exists, adding annotation", "namespace", namespace.Name)
+		tz, err := time.LoadLocation(r.Config.DefaultTimezone)
+		if err != nil {
+			log.Error(err, "Failed to load timezone", "timezone", r.Config.DefaultTimezone)
+			return ctrl.Result{}, nil
+		}
+		namespaceExpirationDateStr := time.Now().In(tz).AddDate(0, 0, r.Config.NamespaceConfig.ExpirationTTLInDays).Format("02/01/2006")
+		if namespace.Annotations == nil {
+			namespace.Annotations = make(map[string]string)
+		}
+		namespace.Annotations[namespaceExpirationDate] = namespaceExpirationDateStr
+		err = r.Update(ctx, namespace)
+		if err != nil {
+			// Log error but continue - TTL annotation is optional, don't block SleepPolicy creation
+			log.Error(err, "Failed to update namespace with TTL annotation", "namespace", namespace.Name)
+			// Continue to create SleepPolicy even if TTL annotation update failed
+		}
+	} else {
+		log.V(1).Info("Namespace TTL feature is disabled", "namespace", namespace.Name)
+	}
+
 	// check if sleepPolicy already exists:
 	sleepPolicyList := &sleepodv1alpha1.SleepPolicyList{}
 	err = r.List(ctx, sleepPolicyList, &client.ListOptions{Namespace: namespace.Name})
@@ -90,6 +132,23 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	log.V(1).Info("Default SleepPolicy created", "namespace", namespace.Name)
 	return ctrl.Result{}, nil
+}
+
+func (r *NamespaceReconciler) calculateRequeueDuration(expirationDate string, timezone string) (time.Duration, error) {
+	tz, err := time.LoadLocation(timezone)
+	if err != nil {
+		return 0, err
+	}
+	date, err := logic.ParseDateFromStr(expirationDate)
+	if err != nil {
+		return 0, err
+	}
+	today := time.Now().In(tz)
+	if today.Before(date) {
+		nextRequeue := date.Sub(today)
+		return nextRequeue, nil
+	}
+	return 0, nil
 }
 
 func (r *NamespaceReconciler) isNamespaceExcludedFromAnnotations(namespace *corev1.Namespace) bool {

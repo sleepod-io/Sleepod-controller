@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+type NamespaceConfig struct {
+	// Namespace controller configuration
+	DelaySeconds        int
+	ExcludedNamespaces  []string
+	TTLEnabled          bool
+	ExpirationTTLInDays int
+}
 type Config struct {
 	// Default sleep configuration
 	DefaultWakeAt   string
@@ -14,8 +21,7 @@ type Config struct {
 	DefaultTimezone string
 
 	// Namespace controller configuration
-	NamespaceDelaySeconds int
-	ExcludedNamespaces    []string
+	NamespaceConfig NamespaceConfig
 
 	// Global policy defaults
 	Weekend              string
@@ -26,13 +32,16 @@ type Config struct {
 // Default configuration constants
 // TODO: export consts to file.
 const (
-	DefaultWakeAt                = "08:00"
-	DefaultSleepAt               = "20:00"
-	DefaultTimezone              = "UTC"
-	DefaultNamespaceDelaySeconds = 20
-	DefaultWeekend               = ""
-	DefaultExcludeWeekend        = false
-	DefaultPolicyEnabled         = false
+	DefaultWakeAt         = "08:00"
+	DefaultSleepAt        = "20:00"
+	DefaultTimezone       = "UTC"
+	DefaultWeekend        = ""
+	DefaultExcludeWeekend = false
+	DefaultPolicyEnabled  = false
+	// NamespaceConfig consts:
+	DefaultNamespaceDelaySeconds        = 20
+	DefaultNamespaceTTLEnabled          = false
+	DefaultNamespaceExpirationTTLInDays = 30
 )
 
 var DefaultExcludedNamespaces = []string{
@@ -45,18 +54,22 @@ var DefaultExcludedNamespaces = []string{
 // Load loads configuration from environment variables
 func Load() *Config {
 	config := &Config{
-		DefaultWakeAt:         getEnvStrOrDefault("SLEEPOD_DEFAULT_WAKE_AT", DefaultWakeAt),
-		DefaultSleepAt:        getEnvStrOrDefault("SLEEPOD_DEFAULT_SLEEP_AT", DefaultSleepAt),
-		DefaultTimezone:       getEnvStrOrDefault("SLEEPOD_DEFAULT_TIMEZONE", DefaultTimezone),
-		ExcludedNamespaces:    getEnvStringSliceOrDefault("SLEEPOD_EXCLUDED_NAMESPACES", DefaultExcludedNamespaces),
-		NamespaceDelaySeconds: getEnvIntOrDefault("SLEEPOD_NAMESPACE_DELAY_SECONDS", DefaultNamespaceDelaySeconds),
-		Weekend:               getEnvStrOrDefault("SLEEPOD_WEEKEND", DefaultWeekend),
-		ExcludeWeekend:        getEnvBoolOrDefault("SLEEPOD_EXCLUDE_WEEKEND", DefaultExcludeWeekend),
-		DefaultPolicyEnabled:  getEnvBoolOrDefault("SLEEPOD_DEFAULT_POLICY_ENABLED", DefaultPolicyEnabled),
+		DefaultWakeAt:        getEnvStrOrDefault("SLEEPOD_DEFAULT_WAKE_AT", DefaultWakeAt),
+		DefaultSleepAt:       getEnvStrOrDefault("SLEEPOD_DEFAULT_SLEEP_AT", DefaultSleepAt),
+		DefaultTimezone:      getEnvStrOrDefault("SLEEPOD_DEFAULT_TIMEZONE", DefaultTimezone),
+		Weekend:              getEnvStrOrDefault("SLEEPOD_WEEKEND", DefaultWeekend),
+		ExcludeWeekend:       getEnvBoolOrDefault("SLEEPOD_EXCLUDE_WEEKEND", DefaultExcludeWeekend),
+		DefaultPolicyEnabled: getEnvBoolOrDefault("SLEEPOD_DEFAULT_POLICY_ENABLED", DefaultPolicyEnabled),
+		NamespaceConfig: NamespaceConfig{
+			DelaySeconds:        getEnvIntOrDefault("SLEEPOD_NAMESPACE_DELAY_SECONDS", DefaultNamespaceDelaySeconds),
+			ExcludedNamespaces:  getEnvStringSliceOrDefault("SLEEPOD_EXCLUDED_NAMESPACES", DefaultExcludedNamespaces),
+			TTLEnabled:          getEnvBoolOrDefault("SLEEPOD_NAMESPACE_TTL_ENABLED", DefaultNamespaceTTLEnabled),
+			ExpirationTTLInDays: getEnvIntOrDefault("SLEEPOD_NAMESPACE_EXPIRATION_TTL_IN_DAYS", DefaultNamespaceExpirationTTLInDays),
+		},
 	}
 	namespace := os.Getenv("SLEEPOD_NAMESPACE")
 	if namespace != "" {
-		config.ExcludedNamespaces = append(config.ExcludedNamespaces, namespace)
+		config.NamespaceConfig.ExcludedNamespaces = append(config.NamespaceConfig.ExcludedNamespaces, namespace)
 	}
 
 	return config
@@ -64,7 +77,7 @@ func Load() *Config {
 
 // IsNamespaceExcludedFromConfig checks if a namespace is in the exclusion list
 func (c *Config) IsNamespaceExcludedFromConfig(namespace string) bool {
-	for _, excluded := range c.ExcludedNamespaces {
+	for _, excluded := range c.NamespaceConfig.ExcludedNamespaces {
 		if excluded == namespace {
 			return true
 		}
@@ -74,7 +87,7 @@ func (c *Config) IsNamespaceExcludedFromConfig(namespace string) bool {
 
 // GetNamespaceDelay returns the delay as a time.Duration
 func (c *Config) GetNamespaceDelay() time.Duration {
-	return time.Duration(c.NamespaceDelaySeconds) * time.Second
+	return time.Duration(c.NamespaceConfig.DelaySeconds) * time.Second
 }
 
 // Helper functions for str environment variable parsing

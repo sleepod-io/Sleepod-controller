@@ -44,9 +44,9 @@ spec:
             - name: SLEEPOD_DEFAULT_TIMEZONE
               value: {{ .Values.config.defaultTimezone | quote }}
             - name: SLEEPOD_NAMESPACE_DELAY_SECONDS
-              value: {{ .Values.config.namespaceDelaySeconds | quote }}
+              value: {{ .Values.config.namespaceConfig.delaySeconds | quote }}
             - name: SLEEPOD_EXCLUDED_NAMESPACES
-              value: {{ join "," .Values.config.excludedNamespaces | quote }}
+              value: {{ join "," .Values.config.namespaceConfig.excludedNamespaces | quote }}
             - name: SLEEPOD_NAMESPACE
               valueFrom:
                 fieldRef:

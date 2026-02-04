@@ -70,6 +70,12 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+		By("patching the controller-manager to enable Namespace TTL")
+		cmd = exec.Command("kubectl", "set", "env", "deployment/sleepod-controller-controller-manager",
+			"SLEEPOD_NAMESPACE_TTL_ENABLED=true", "-n", namespace)
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to enable Namespace TTL")
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
@@ -206,12 +212,19 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		It("should ensure the metrics endpoint is serving metrics", func() {
+			By("creating a dummy namespace to trigger reconciliation (ensuring metrics generation)")
+			triggerNsName := "metrics-trigger-ns"
+			cmd := exec.Command("kubectl", "create", "ns", triggerNsName)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = exec.Command("kubectl", "delete", "ns", triggerNsName).Run() }()
+
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
-			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
+			cmd = exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
 				"--clusterrole=sleepod-controller-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
-			_, err := utils.Run(cmd)
+			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
 			By("validating that the metrics service is available")
@@ -254,7 +267,7 @@ var _ = Describe("Manager", Ordered, func() {
 							"name": "curl",
 							"image": "curlimages/curl:latest",
 							"command": ["/bin/sh", "-c"],
-							"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
+							"args": ["sleep infinity"],
 							"securityContext": {
 								"readOnlyRootFilesystem": true,
 								"allowPrivilegeEscalation": false,
@@ -270,26 +283,32 @@ var _ = Describe("Manager", Ordered, func() {
 						}],
 						"serviceAccountName": "%s"
 					}
-				}`, token, metricsServiceName, namespace, serviceAccountName))
+				}`, serviceAccountName))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
 
-			By("waiting for the curl-metrics pod to complete.")
+			By("waiting for the curl-metrics pod to be running")
 			verifyCurlUp := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
 					"-o", "jsonpath={.status.phase}",
 					"-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
+				g.Expect(output).To(Equal("Running"), "curl pod in wrong status")
 			}
 			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
 
-			By("getting the metrics by checking curl-metrics logs")
-			metricsOutput := getMetricsOutput()
-			Expect(metricsOutput).To(ContainSubstring(
-				"controller_runtime_reconcile_total",
-			))
+			By("getting the metrics by running curl inside the pod")
+			verifyMetrics := func(g Gomega) {
+				authHeader := fmt.Sprintf("Authorization: Bearer %s", token)
+				metricsURL := fmt.Sprintf("https://%s.%s.svc.cluster.local:8443/metrics", metricsServiceName, namespace)
+				cmd := exec.Command("kubectl", "exec", "curl-metrics", "-n", namespace, "--",
+					"curl", "-v", "-k", "-H", authHeader, metricsURL)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("controller_runtime_reconcile_total"))
+			}
+			Eventually(verifyMetrics, 2*time.Minute).Should(Succeed())
 		})
 
 		Context("SleepOrder Controller", func() {
@@ -739,6 +758,67 @@ metadata:
 					}
 				}, 2*time.Minute, time.Second).Should(Succeed())
 			})
+
+			It("should delete namespace when TTL is expired", func() {
+				// NOTE: We assume the controller is deployed with TTL enabled for this test to pass.
+				// If the standard deploy doesn't have it enabled by default, we might need to redeploy
+				// or assume the user (or previous setup) enabled it.
+				// Based on plan, we assume installed with TTL enabled. If not, we might need `make deploy` with env vars.
+				// However, `config.go` has default false.
+				// Let's assume for this specific test flow we rely on the environment being set correctly
+				// or we update the deployment for this test context.
+				// Given the constraints of E2E in a running cluster, usually we can't easily change env vars on the fly
+				// without restart.
+				// I'll add the test logic, assuming the feature is enabled or will be enabled for the test run.
+
+				ttlTestNamespace := "e2e-ttl-test"
+				noActionNamespace := "e2e-ttl-no-action"
+
+				By("creating a namespace that should NOT be deleted yet")
+				cmd := exec.Command("kubectl", "create", "ns", noActionNamespace)
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = exec.Command("kubectl", "delete", "ns", noActionNamespace).Run() }()
+
+				// We don't add expiration annotation, so if default TTL is 30 days, it shouldn't be deleted now.
+				Consistently(func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "ns", noActionNamespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "Namespace should exist")
+				}, 10*time.Second, time.Second).Should(Succeed())
+
+				By("creating a namespace with past expiration date")
+				cmd = exec.Command("kubectl", "create", "ns", ttlTestNamespace)
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+				// deferred delete just in case
+				defer func() { _ = exec.Command("kubectl", "delete", "ns", ttlTestNamespace).Run() }()
+
+				// Annotate with past date
+				pastDate := time.Now().UTC().AddDate(0, 0, -1).Format("02/01/2006")
+				cmd = exec.Command("kubectl", "annotate", "ns", ttlTestNamespace,
+					fmt.Sprintf("sleepod.io/expirationDate=%s", pastDate))
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("verifying namespace is deleted")
+				Eventually(func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "ns", ttlTestNamespace)
+					output, err := utils.Run(cmd)
+					// Verify it's gone (NotFound error or output text)
+					if err == nil {
+						// If command succeeds, check if status is Terminating or if output implies existence
+						// Ideally looking for exit code 1 from kubectl get if not found
+						// But utils.Run might capture stderr.
+						g.Expect(output).To(ContainSubstring("NotFound"), "Namespace should be deleted")
+					} else {
+						// Error usually means not found or connection error.
+						// We assume it's NotFound.
+						g.Expect(output).To(ContainSubstring("NotFound"))
+					}
+				}, 2*time.Minute, time.Second).Should(Succeed())
+			})
+
 		})
 
 	})
@@ -880,16 +960,6 @@ func serviceAccountToken() (string, error) {
 	Eventually(verifyTokenCreation).Should(Succeed())
 
 	return out, err
-}
-
-// getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
-func getMetricsOutput() string {
-	By("getting the curl-metrics logs")
-	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
-	metricsOutput, err := utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-	Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
-	return metricsOutput
 }
 
 // tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,

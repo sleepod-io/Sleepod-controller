@@ -172,3 +172,12 @@ func parseDay(day string) time.Weekday {
 	}
 	return -1
 }
+
+func ParseDateFromStr(date string) (time.Time, error) {
+	layout := "02/01/2006"
+	dateParsed, err := time.Parse(layout, date)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date format: %w", err)
+	}
+	return dateParsed, nil
+}
