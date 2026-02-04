@@ -23,7 +23,7 @@ type NamespaceReconciler struct {
 	Config *config.Config
 }
 
-// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;update;patch;delete
 // +kubebuilder:rbac:groups=sleepod.sleepod.io,resources=sleeppolicies,verbs=get;list;watch;create
 
 func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -104,8 +104,9 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		namespace.Annotations[namespaceExpirationDate] = namespaceExpirationDateStr
 		err = r.Update(ctx, namespace)
 		if err != nil {
-			log.Error(err, "Failed to update namespace", "namespace", namespace.Name)
-			return ctrl.Result{}, nil
+			// Log error but continue - TTL annotation is optional, don't block SleepPolicy creation
+			log.Error(err, "Failed to update namespace with TTL annotation", "namespace", namespace.Name)
+			// Continue to create SleepPolicy even if TTL annotation update failed
 		}
 	} else {
 		log.V(1).Info("Namespace TTL feature is disabled", "namespace", namespace.Name)
