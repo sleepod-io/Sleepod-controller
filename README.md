@@ -33,6 +33,7 @@ graph TD
 - **Policy-Based Management**: Create `SleepPolicy` resources to group and manage workloads.
 - **Resource Support**: Supports Deployments and StatefulSets.
 - **Configurable Timezones**: Schedule sleep/wake times in your local timezone.
+- **Working Days Control**: Limit sleep schedules to specific days (e.g., "Monday-Friday") using the `workingDays` field.
 - **Namespace TTL**: Automatically delete namespaces after a configurable number of days.
 
 ## Namespace TTL
@@ -60,6 +61,10 @@ metadata:
 
 ### Install using Helm
 
+**Recommended**
+ to use custom values.yaml file to install the controller.
+you can find the default values.yaml file in the [dist/chart/values.yaml](dist/chart/values.yaml) file.
+
 1. Add the Helm repository:
    ```bash
    helm repo add sleepod https://sleepod-io.github.io/Sleepod-controller
@@ -81,7 +86,7 @@ metadata:
 ### 1. Create a SleepPolicy
 
 Create a `SleepPolicy` manifest to define your sleep schedule. You can define default settings for all deployments/statefulsets in a namespace, or target specific ones by name.
-
+> **Note**: The controller will create a default policy for all namespaces unless its excluded in the config.
 ```yaml
 apiVersion: sleepod.sleepod.io/v1alpha1
 kind: SleepPolicy
@@ -96,7 +101,7 @@ spec:
       enable: true
       sleepAt: "20:00" # 8:00 PM
       wakeAt: "08:00"  # 8:00 AM
-      workingDays: "Monday-Friday" # Optional: Restrict to working days only
+      workingDays: "Monday-Friday" # Optional: Restrict to specific days (e.g., "Mon-Fri", "Monday,Wednesday")
     # specific deployment override
     backend-service:
       enable: false # Do not sleep this service
@@ -118,10 +123,30 @@ kubectl apply -f my-policy.yaml
 ```
 
 The controller will now monitor the resources in the `default` namespace. It will automatically create `SleepOrder` resources to scale the workloads down and up at the specified times.
+> **Note**: On the same namespace you can define multiple policies, if there are two resources and one of them is the default policy, the controller take the non-default policy. On othere cases, the controller will log an error and not create any `SleepOrder` resources.
 
 ## Configuration
 
-The Helm chart can be customized using `values.yaml`. Here are the most common configurations:
+The Helm chart can be customized using `values.yaml`. Here are the application configuration options:
+
+```yaml
+config:
+  defaultWakeAt: "08:00" # time in HH:MM format
+  defaultSleepAt: "20:00" # time in HH:MM format
+  defaultTimezone: "UTC" # timezone
+  logLevel: info # or debug, warn, error
+  weekend: "friday,saturday" # comma separated list of weekend days
+  excludeWeekend: true # whether to automatically exclude weekend days from default working days
+  defaultPolicyEnabled: false # whether default policies are enabled
+  namespaceConfig:
+    delaySeconds: 20 # delay before processing changes
+    excludedNamespaces:
+      # Also possible to exclude by annotation: sleepod.io/exclude: "true" on the Namespace
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - local-path-storage
+```
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
