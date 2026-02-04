@@ -124,6 +124,11 @@ The Helm chart can be customized using `values.yaml`. Here are the most common c
 | `resources.requests/limits` | CPU/Memory requests and limits | (See values.yaml) |
 
 
+
+## ArgoCD Compatibility
+
+If you are using ArgoCD to manage your deployments, and you are using auto-sync configuration, you should update your applications to ignoreDifferences or globaly ignore the `spec.replicas` field on argocd-cm to prevent ArgoCD from fighting with the controller when it scales down resources.
+
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to get started.
