@@ -35,4 +35,5 @@ const (
 // Namespace Annotations:
 const (
 	namespaceExcludeAnnotation string = "sleepod.io/exclude"
+	namespaceExpirationDate    string = "sleepod.io/expirationDate"
 )

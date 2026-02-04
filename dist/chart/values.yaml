@@ -52,17 +52,18 @@ config:
   defaultWakeAt: "08:00"
   defaultSleepAt: "20:00"
   defaultTimezone: "UTC"
-  namespaceDelaySeconds: 20
-  excludedNamespaces:
-    # Also possible to exclude by annotation: sleepod.io/exclude: "true" on the Namespace
-    - kube-system
-    - kube-public
-    - kube-node-lease
-    - local-path-storage
   logLevel: info
   weekend: "friday,saturday"
   excludeWeekend: true
   defaultPolicyEnabled: false
+  namespaceConfig:
+    delaySeconds: 20
+    excludedNamespaces:
+      # Also possible to exclude by annotation: sleepod.io/exclude: "true" on the Namespace
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - local-path-storage
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:

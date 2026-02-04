@@ -26,8 +26,10 @@ func TestNamespaceCreation(t *testing.T) {
 	_ = sleepodv1alpha1.AddToScheme(scheme)
 
 	defaultConfig := &config.Config{
-		NamespaceDelaySeconds: 1,
-		DefaultPolicyEnabled:  true,
+		NamespaceConfig: config.NamespaceConfig{
+			DelaySeconds: 1,
+		},
+		DefaultPolicyEnabled: true,
 	}
 
 	tests := []struct {
@@ -75,9 +77,11 @@ func TestNamespaceCreation(t *testing.T) {
 				},
 			},
 			config: &config.Config{
-				NamespaceDelaySeconds: 1,
-				DefaultPolicyEnabled:  true,
-				ExcludedNamespaces:    []string{"excluded-namespace"},
+				NamespaceConfig: config.NamespaceConfig{
+					DelaySeconds:       1,
+					ExcludedNamespaces: []string{"excluded-namespace"},
+				},
+				DefaultPolicyEnabled: true,
 			},
 			expectRequeueAfter:     1 * time.Second,
 			shouldCreate:           false,
@@ -234,8 +238,10 @@ func TestNamespaceDeletion(t *testing.T) {
 		Build()
 
 	defaultConfig := &config.Config{
-		NamespaceDelaySeconds: 1,
-		DefaultPolicyEnabled:  true,
+		NamespaceConfig: config.NamespaceConfig{
+			DelaySeconds: 1,
+		},
+		DefaultPolicyEnabled: true,
 	}
 
 	// create the Reconciler

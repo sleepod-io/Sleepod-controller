@@ -33,6 +33,23 @@ graph TD
 - **Policy-Based Management**: Create `SleepPolicy` resources to group and manage workloads.
 - **Resource Support**: Supports Deployments and StatefulSets.
 - **Configurable Timezones**: Schedule sleep/wake times in your local timezone.
+- **Namespace TTL**: Automatically delete namespaces after a configurable number of days.
+
+## Namespace TTL
+
+You can enable the Namespace TTL feature to automatically delete namespaces that are older than a configured expiration time. This is useful for cleaning up ephemeral testing environments.
+
+To enable this globally, set `config.namespaceTTLEnabled` to `true` in your Helm values or set the `SLEEPOD_NAMESPACE_TTL_ENABLED` environment variable. (the default is false)
+
+After enabling the TTL, you can define the expiration time in days using `config.namespaceExpirationTTLInDays` in your Helm values or set the `SLEEPOD_NAMESPACE_TTL_DAYS` environment variable. (the default is 30 days)
+
+The expiration date is calculated based on the creation time of the namespace or when the controller first processes it, plus the configured TTL days. You can also manually set or override the expiration date using the annotation:
+
+```yaml
+metadata:
+  annotations:
+    sleepod.io/expirationDate: "01/01/2027" # DD/MM/YYYY
+```
 
 ## Installation
 
@@ -112,6 +129,8 @@ The Helm chart can be customized using `values.yaml`. Here are the most common c
 | `config.defaultSleepAt` | Default sleep time | `"20:00"` |
 | `config.defaultWakeAt` | Default wake time | `"08:00"` |
 | `config.excludedNamespaces` | List of namespaces the controller should ignore | `kube-system`, etc. |
+| `config.namespaceTTLEnabled` | Enable Namespace TTL feature | `false` |
+| `config.namespaceExpirationTTLInDays` | Default TTL in days for namespaces | `30` |
 | `sleepod.io/exclude` | Annotation to exclude a namespace from being managed | `"true"` (on Namespace) |
 | `config.namespaceDelaySeconds`| Delay before processing changes | `20` |
 | `config.weekend` | Comma-separated list of weekend days (e.g., "Saturday,Sunday") | `""` |
