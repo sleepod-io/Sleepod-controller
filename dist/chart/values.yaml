@@ -62,6 +62,7 @@ config:
   logLevel: info
   weekend: "friday,saturday"
   excludeWeekend: true
+  defaultPolicyEnabled: false
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:

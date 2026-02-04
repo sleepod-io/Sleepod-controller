@@ -18,8 +18,9 @@ type Config struct {
 	ExcludedNamespaces    []string
 
 	// Global policy defaults
-	Weekend        string
-	ExcludeWeekend bool
+	Weekend              string
+	ExcludeWeekend       bool
+	DefaultPolicyEnabled bool
 }
 
 // Default configuration constants
@@ -31,6 +32,7 @@ const (
 	DefaultNamespaceDelaySeconds = 20
 	DefaultWeekend               = ""
 	DefaultExcludeWeekend        = false
+	DefaultPolicyEnabled         = false
 )
 
 var DefaultExcludedNamespaces = []string{
@@ -50,6 +52,7 @@ func Load() *Config {
 		NamespaceDelaySeconds: getEnvIntOrDefault("SLEEPOD_NAMESPACE_DELAY_SECONDS", DefaultNamespaceDelaySeconds),
 		Weekend:               getEnvStrOrDefault("SLEEPOD_WEEKEND", DefaultWeekend),
 		ExcludeWeekend:        getEnvBoolOrDefault("SLEEPOD_EXCLUDE_WEEKEND", DefaultExcludeWeekend),
+		DefaultPolicyEnabled:  getEnvBoolOrDefault("SLEEPOD_DEFAULT_POLICY_ENABLED", DefaultPolicyEnabled),
 	}
 	namespace := os.Getenv("SLEEPOD_NAMESPACE")
 	if namespace != "" {
