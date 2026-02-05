@@ -2,6 +2,6 @@ apiVersion: v2
 name: sleepod-controller
 description: A Helm chart for Sleepod Controller, which allow you to manages sleep/wake schedules for Kubernetes workloads using namespace policies to reduce costs.
 type: application
-version: 0.0.3
-appVersion: "0.0.3"
+version: 0.0.4
+appVersion: "0.0.4"
 icon: https://raw.githubusercontent.com/sleepod-io/Sleepod-controller/main/assets/logo.png
