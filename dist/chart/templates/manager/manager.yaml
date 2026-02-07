@@ -53,6 +53,14 @@ spec:
                   fieldPath: metadata.namespace
             - name: SLEEPOD_DEFAULT_POLICY_ENABLED
               value: {{ .Values.config.defaultPolicyEnabled | quote }}
+            - name: SLEEPOD_WEEKEND
+              value: {{ .Values.config.weekend | quote }}
+            - name: SLEEPOD_EXCLUDE_WEEKEND
+              value: {{ .Values.config.excludeWeekend | quote }}
+            - name: SLEEPOD_NAMESPACE_TTL_ENABLED
+              value: {{ .Values.config.namespaceConfig.ttlEnabled | quote }}
+            - name: SLEEPOD_NAMESPACE_EXPIRATION_TTL_IN_DAYS
+              value: {{ .Values.config.namespaceConfig.expirationTTLInDays | quote }}
             {{- if .Values.controllerManager.container.env }}
             {{- range $key, $value := .Values.controllerManager.container.env }}
             - name: {{ $key }}
