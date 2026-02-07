@@ -12,7 +12,7 @@ spec:
     metadata:
       name: {{ include "chart.fullname" . }}-cleanup
     spec:
-      serviceAccountName: {{ .Values.controllerManager.serviceAccountName }}
+      serviceAccountName: {{ include "chart.fullname" . }}-cleanup
       restartPolicy: Never
       containers:
         - name: cleanup
