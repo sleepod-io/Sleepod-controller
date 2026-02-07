@@ -53,11 +53,13 @@ config:
   defaultSleepAt: "20:00"
   defaultTimezone: "UTC"
   logLevel: info
-  weekend: "friday,saturday"
   excludeWeekend: false
+  weekend: "friday,saturday" # will work only if excludeWeekend is true
   defaultPolicyEnabled: false
   namespaceConfig:
     delaySeconds: 20
+    ttlEnabled: false
+    expirationTTLInDays: 30 # in days, will work only if ttlEnabled is true
     excludedNamespaces:
       # Also possible to exclude by annotation: sleepod.io/exclude: "true" on the Namespace
       - kube-system
