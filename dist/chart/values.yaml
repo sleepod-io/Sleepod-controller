@@ -54,7 +54,7 @@ config:
   defaultTimezone: "UTC"
   logLevel: info
   weekend: "friday,saturday"
-  excludeWeekend: true
+  excludeWeekend: false
   defaultPolicyEnabled: false
   namespaceConfig:
     delaySeconds: 20
