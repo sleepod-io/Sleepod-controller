@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "chart.fullname" . }}-cleanup
+  namespace: {{ .Values.defaultNamespace | default .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "-5"
+spec:
+  template:
+    metadata:
+      name: {{ include "chart.fullname" . }}-cleanup
+    spec:
+      serviceAccountName: {{ include "chart.fullname" . }}-cleanup
+      restartPolicy: Never
+      containers:
+        - name: cleanup
+          image: "{{ .Values.cleanup.image.repository }}:{{ .Values.cleanup.image.tag }}"
+          imagePullPolicy: {{ .Values.cleanup.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - "kubectl delete sleeppolicy --all --all-namespaces --wait=true"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
