@@ -19,9 +19,12 @@ spec:
           image: "{{ .Values.cleanup.image.repository }}:{{ .Values.cleanup.image.tag }}"
           imagePullPolicy: {{ .Values.cleanup.image.pullPolicy }}
           command:
-            - /bin/sh
-            - -c
-            - "kubectl delete sleeppolicy --all --all-namespaces --wait=true"
+            - kubectl
+            - delete
+            - sleeppolicy
+            - --all
+            - --all-namespaces
+            - --wait=true
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
