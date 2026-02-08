@@ -79,6 +79,7 @@ jobs:
       - name: Install Helm chart for project
         run: |
           helm install my-release ./dist/chart --create-namespace --namespace sleepod-controller-helm \
+            --set defaultNamespace="" \
             --set controllerManager.container.image.repository=sleepod-controller \
             --set controllerManager.container.image.tag=v0.1.0
 
