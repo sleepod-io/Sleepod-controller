@@ -161,6 +161,7 @@ config:
 | `config.weekend` | Comma-separated list of weekend days (e.g., "Saturday,Sunday") | `""` |
 | `config.excludeWeekend` | Whether to automatically exclude weekend days from default working days | `false` |
 | `config.defaultPolicyEnabled` | Whether default policies are enabled | `false` |
+| `defaultNamespace` | The namespace where resources will be created. Set to `""` to use the namespace specified by `helm install -n`. | `sleepod-controller-system` |
 | `controllerManager.replicas` | Number of controller replicas | `1` |
 | `controllerManager.nodeSelector` | Node labels for pod assignment | `{}` |
 | `controllerManager.tolerations` | Tolerations for pod assignment | `[]` |
