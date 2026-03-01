@@ -6,6 +6,7 @@ const (
 	kindDeployment         string = "Deployment"
 	kindStatefulSet        string = "StatefulSet"
 	DefaultSleepPolicyName string = "default-sleeppolicy"
+	DefaultNamespace       string = "default"
 )
 
 // SleepOrder Annotations:

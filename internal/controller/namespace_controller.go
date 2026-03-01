@@ -91,22 +91,24 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 			return ctrl.Result{}, nil
 		}
-		log.V(1).Info("Namespace expiration date is not exists, adding annotation", "namespace", namespace.Name)
-		tz, err := time.LoadLocation(r.Config.DefaultTimezone)
-		if err != nil {
-			log.Error(err, "Failed to load timezone", "timezone", r.Config.DefaultTimezone)
-			return ctrl.Result{}, nil
-		}
-		namespaceExpirationDateStr := time.Now().In(tz).AddDate(0, 0, r.Config.NamespaceConfig.ExpirationTTLInDays).Format("02/01/2006")
-		if namespace.Annotations == nil {
-			namespace.Annotations = make(map[string]string)
-		}
-		namespace.Annotations[namespaceExpirationDate] = namespaceExpirationDateStr
-		err = r.Update(ctx, namespace)
-		if err != nil {
-			// Log error but continue - TTL annotation is optional, don't block SleepPolicy creation
-			log.Error(err, "Failed to update namespace with TTL annotation", "namespace", namespace.Name)
-			// Continue to create SleepPolicy even if TTL annotation update failed
+		if namespace.Name != DefaultNamespace {
+			log.V(1).Info("Namespace expiration date is not exists, adding annotation", "namespace", namespace.Name)
+			tz, err := time.LoadLocation(r.Config.DefaultTimezone)
+			if err != nil {
+				log.Error(err, "Failed to load timezone", "timezone", r.Config.DefaultTimezone)
+				return ctrl.Result{}, nil
+			}
+			namespaceExpirationDateStr := time.Now().In(tz).AddDate(0, 0, r.Config.NamespaceConfig.ExpirationTTLInDays).Format("02/01/2006")
+			if namespace.Annotations == nil {
+				namespace.Annotations = make(map[string]string)
+			}
+			namespace.Annotations[namespaceExpirationDate] = namespaceExpirationDateStr
+			err = r.Update(ctx, namespace)
+			if err != nil {
+				// Log error but continue - TTL annotation is optional, don't block SleepPolicy creation
+				log.Error(err, "Failed to update namespace with TTL annotation", "namespace", namespace.Name)
+				// Continue to create SleepPolicy even if TTL annotation update failed
+			}
 		}
 	} else {
 		log.V(1).Info("Namespace TTL feature is disabled", "namespace", namespace.Name)
