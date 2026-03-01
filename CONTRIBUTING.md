@@ -6,7 +6,7 @@ Thank you for your interest in contributing to SleePod-controller! We welcome co
 
 ### Prerequisites
 
-- Go (v1.24+)
+- Go (v1.26+)
 - Docker
 - Kubernetes Cluster (Kind, Minikube, or remote)
 - Kubectl
