@@ -7,7 +7,9 @@ domain: sleepod.io
 layout:
 - go.kubebuilder.io/v4
 plugins:
-  helm.kubebuilder.io/v1-alpha: {}
+  helm.kubebuilder.io/v2-alpha:
+    manifests: dist/install.yaml
+    output: dist
 projectName: sleepod-controller
 repo: github.com/sleepod-io/sleepod-controller
 resources:
