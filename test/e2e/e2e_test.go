@@ -988,7 +988,7 @@ var _ = Describe("Helm Deployment", Ordered, func() {
 		}, 2*time.Minute, time.Second).Should(Succeed())
 
 		By("packaging the helm chart")
-		cmd := exec.Command("make", "helm-package")
+		cmd := exec.Command("helm", "package", "dist/chart", "-d", "dist")
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to package helm chart")
 
@@ -1017,11 +1017,10 @@ var _ = Describe("Helm Deployment", Ordered, func() {
 		By("creating a custom values.yaml")
 		customValues := fmt.Sprintf(`
 defaultNamespace: ""
-controllerManager:
-  container:
-    image:
-      repository: %s
-      tag: %s
+manager:
+  image:
+    repository: %s
+    tag: %s
 `, repo, tag)
 		customValuesPath := filepath.Join(filepath.Dir(chartPackagePath), "custom_values_e2e.yaml")
 		err = os.WriteFile(customValuesPath, []byte(customValues), 0644)
@@ -1056,10 +1055,15 @@ controllerManager:
 					"-o", "jsonpath={.items[0].status.phase}",
 				)
 				output, err := utils.Run(cmd)
+				if err != nil || output != "Running" {
+					descCmd := exec.Command("kubectl", "describe", "pods", "-n", helmNamespace)
+					descOut, _ := descCmd.CombinedOutput()
+					fmt.Printf("\n--- POD DESCRIBE ---\n%s\n--------------------\n", string(descOut))
+				}
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Running"), "Controller pod is not running")
 			}
-			Eventually(verifyControllerUp, "2m", "1s").Should(Succeed())
+			Eventually(verifyControllerUp, "2m", "10s").Should(Succeed())
 		})
 	})
 })

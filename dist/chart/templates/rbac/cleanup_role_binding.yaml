@@ -1,16 +1,19 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "chart.fullname" . }}-cleanup-rolebinding
+  name: {{ include "sleepod-controller.fullname" . }}-cleanup-rolebinding
   labels:
-    {{- include "chart.labels" . | nindent 4 }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "sleepod-controller.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
   annotations:
     "helm.sh/hook": pre-delete
     "helm.sh/hook-delete-policy": hook-succeeded
     "helm.sh/hook-weight": "-10"
 subjects:
 - kind: ServiceAccount
-  name: {{ include "chart.fullname" . }}-cleanup
+  name: {{ include "sleepod-controller.fullname" . }}-cleanup
   namespace: {{ .Values.defaultNamespace | default .Release.Namespace }}
 roleRef:
   kind: ClusterRole
